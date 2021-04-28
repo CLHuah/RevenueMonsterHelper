@@ -4,6 +4,57 @@ using System.Collections.Generic;
 
 namespace RevenueMonsterLibrary.Model
 {
+    public class ExtraInfo
+    {
+        public string reference { get; set; }
+        public string type { get; set; }
+    }
+
+    public class QuickPay
+    {
+        public string authCode { get; set; }
+        public ExtraInfo extraInfo { get; set; }
+        public string ipAddress { get; set; }
+        public Order order { get; set; }
+        public string storeId { get; set; }
+    }
+
+
+    public class PaymentTransactionByOrderID
+    {
+        public string code { get; set; }
+        public Error error { get; set; }
+        public TransactionQuickPay item { get; set; }
+    }
+
+    public class TransactionQuickPay
+    {
+        public long balanceAmount { get; set; }
+        public string createdAt { get; set; }
+        public string currencyType { get; set; }
+        public Error error { get; set; }
+        public string method { get; set; }
+        public Order order { get; set; }
+        public Payee payee { get; set; }
+        public string platform { get; set; }
+        public string referenceId { get; set; }
+        public string region { get; set; }
+        public string status { get; set; }
+        public Store store { get; set; }
+        public string terminalId { get; set; }
+        public string transactionAt { get; set; }
+        public string transactionId { get; set; }
+        public string type { get; set; }
+        public string updatedAt { get; set; }
+    }
+
+    public class Expiry
+    {
+        public float day { get; set; }
+        public string expiredAt { get; set; }
+        public string type { get; set; }
+    }
+
     public class Store
     {
         public string addressLine1 { get; set; }
@@ -11,7 +62,7 @@ namespace RevenueMonsterLibrary.Model
         public string city { get; set; }
         public string country { get; set; }
         public string countryCode { get; set; }
-        public DateTimeOffset createdAt { get; set; }
+        public string createdAt { get; set; }
         public GeoLocation geoLocation { get; set; }
         public string id { get; set; }
         public Uri imageUrl { get; set; }
@@ -20,17 +71,18 @@ namespace RevenueMonsterLibrary.Model
         public string postCode { get; set; }
         public string state { get; set; }
         public string status { get; set; }
-        public DateTimeOffset updatedAt { get; set; }
+        public string updatedAt { get; set; }
     }
 
     public class GeoLocation
     {
-        public long latitude { get; set; }
-        public long longitude { get; set; }
+        public decimal latitude { get; set; }
+        public decimal longitude { get; set; }
     }
 
     public class Payee
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string userId { get; set; }
     }
 
@@ -41,32 +93,36 @@ namespace RevenueMonsterLibrary.Model
             order = new Order();
         }
 
-        public Order order { get; set; }
+        public string layoutVersion { get; set; } // v1 / v2 (Supported Credit Card)
         public IList<string> method { get; set; }
 
-        public string type { get; set; } // WEB_PAYMENT or MOBILE_PAYMENT
-        public string storeId { get; set; }
+        public string notifyUrl { get; set; }
+
+        public Order order { get; set; }
 
         public string redirectUrl { get; set; }
+        public string storeId { get; set; }
 
-        public string notifyUrl { get; set; }
-        public string layoutVersion { get; set; } // v1 / v2 (Supported Credit Card)
+        public string type { get; set; } // WEB_PAYMENT or MOBILE_PAYMENT
     }
 
     public class Order
     {
-        public string id { get; set; }
-        public string title { get; set; }
-        public string detail { get; set; }
         public string additionalData { get; set; }
         public long amount { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string currencyType { get; set; }
+
+        public string detail { get; set; }
+        public string id { get; set; }
+        public string title { get; set; }
     }
 
     public class WebPaymentResponse
     {
-        public Item item { get; set; }
         public string code { get; set; }
+        public Item item { get; set; }
     }
 
     public class Item
@@ -84,7 +140,7 @@ namespace RevenueMonsterLibrary.Model
     public class Data
     {
         public long balanceAmount { get; set; }
-        public DateTimeOffset createdAt { get; set; }
+        public string createdAt { get; set; }
         public string currencyType { get; set; }
         public string method { get; set; }
         public Order order { get; set; }
@@ -95,9 +151,10 @@ namespace RevenueMonsterLibrary.Model
         public string status { get; set; }
         public Store store { get; set; }
         public string terminalId { get; set; }
-        public DateTimeOffset transactionAt { get; set; }
+        public string transactionAt { get; set; }
         public string transactionId { get; set; }
         public string type { get; set; }
-        public DateTimeOffset updatedAt { get; set; }
+        public string updatedAt { get; set; }
+        public Voucher voucher { get; set; }
     }
 }
