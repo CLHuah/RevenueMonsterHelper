@@ -74,9 +74,42 @@ namespace RevenueMonsterLibrary.Helper
             foreach (var prop in props.OrderBy(p => p.Name))
             {
                 jObj.Add(prop);
-                if (prop.Value is Newtonsoft.Json.Linq.JObject)
-                    Sort((Newtonsoft.Json.Linq.JObject)prop.Value);
+                if (prop.Value is Newtonsoft.Json.Linq.JObject) Sort((Newtonsoft.Json.Linq.JObject) prop.Value);
             }
+        }
+
+        public static bool VerifySignature(object data, string method, string nonceStr, string publicKey, string requestUrl,
+            string signType, string timestamp, string signature)
+        {
+            var result = false;
+            try
+            {
+                var sb = new StringBuilder();
+                if (data != null)
+                {
+                    var encodedData = Encode.Base64Encode(GenerateCompactJson(data));
+                    sb.Append($"data={encodedData}&");
+                }
+
+                sb.Append($"method={method}&");
+                sb.Append($"nonceStr={nonceStr}&");
+                if (!string.IsNullOrWhiteSpace(requestUrl)) sb.Append($"requestUrl={requestUrl}&");
+                sb.Append($"signType={signType}&");
+                sb.Append($"timestamp={timestamp}");
+
+                var plainText = sb.ToString();
+
+                var plainTextByte = Encoding.UTF8.GetBytes(plainText);
+                var signatureByte = Convert.FromBase64String(signature);
+                var provider = PemKeyHelper.GetRSAProviderFromPemFile(publicKey);
+                result = provider.VerifyData(plainTextByte, CryptoConfig.MapNameToOID("SHA256"), signatureByte);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error", ex.Message);
+            }
+
+            return result;
         }
     }
 }
