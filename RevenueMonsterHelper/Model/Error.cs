@@ -1,8 +1,7 @@
-﻿namespace RevenueMonsterLibrary.Model
+﻿namespace RevenueMonsterLibrary.Model;
+
+public class Error
 {
-    public class Error
-    {
-        public string code { get; set; }
-        public string message { get; set; }
-    }
+    public string code { get; set; }
+    public string message { get; set; }
 }
