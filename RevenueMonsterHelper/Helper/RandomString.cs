@@ -1,22 +1,32 @@
 ﻿using System;
 using System.Text;
 
-namespace RevenueMonsterLibrary.Helper
+namespace RevenueMonsterLibrary.Helper;
+
+public class RandomString
 {
-    public class RandomString
+    private static readonly Random Random = new((int)DateTime.Now.Ticks);
+
+    /// <summary>
+    ///     Generates a random string of the specified size consisting of uppercase letters.
+    /// </summary>
+    /// <param name="size">The size of the random string to generate.</param>
+    /// <returns>A random string of the specified size.</returns>
+    public static string GenerateRandomString(int size)
     {
-        private static readonly Random Random = new Random((int) DateTime.Now.Ticks);
+        var builder = new StringBuilder();
 
-        public static string GenerateRandomString(int size)
+        // Loop to generate individual characters for the random string
+        for (var i = 0; i < size; i++)
         {
-            var builder = new StringBuilder();
-            for (var i = 0; i < size; i++)
-            {
-                var ch = Convert.ToChar(Convert.ToInt32(Math.Floor(26 * Random.NextDouble() + 65)));
-                builder.Append(ch);
-            }
+            // Generate a random character within the range of uppercase letters (A-Z)
+            var ch = (char)(Random.Next(26) + 'A');
 
-            return builder.ToString();
+            // Append the generated character to the string builder
+            builder.Append(ch);
         }
+
+        // Return the generated random string
+        return builder.ToString();
     }
 }
