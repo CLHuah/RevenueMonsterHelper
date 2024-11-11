@@ -4,6 +4,31 @@
 public class SignatureHelperTests
 {
     [TestMethod]
+    public void GenerateCompactJson_ComplexObject_ReturnsSortedAndEscapedResult()
+    {
+        // Arrange
+        var testObject = new
+        {
+            zValue = "last",
+            specialText = "a<b>&c",
+            nested = new
+            {
+                b = 2,
+                a = 1
+            },
+            aValue = "first"
+        };
+
+        // Act
+        var result = SignatureHelper.GenerateCompactJson(testObject);
+
+        // Assert
+        Assert.AreEqual(
+            "{\"aValue\":\"first\",\"nested\":{\"a\":1,\"b\":2},\"specialText\":\"a\\u003cb\\u003e\\u0026c\",\"zValue\":\"last\"}",
+            result);
+    }
+
+    [TestMethod]
     [ExpectedException(typeof(ArgumentNullException))]
     public void GenerateCompactJson_NullInput_ShouldThrowException()
     {
@@ -37,6 +62,22 @@ public class SignatureHelperTests
             "{\"Inner\":{\"InnerId\":1,\"InnerName\":\"Inner\"},\"OuterId\":2,\"OuterName\":\"Outer\"}";
 
         Assert.AreEqual(expectedJson, result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJson_SpecialCharacters_ReturnsEscapedCharacters()
+    {
+        // Arrange
+        var testObject = new
+        {
+            text = "a<b>c&d"
+        };
+
+        // Act
+        var result = SignatureHelper.GenerateCompactJson(testObject);
+
+        // Assert
+        Assert.AreEqual("{\"text\":\"a\\u003cb\\u003ec\\u0026d\"}", result);
     }
 
     // Define a sample class for testing
