@@ -28,8 +28,13 @@ public static class SignatureHelper
         // Parse the JSON string into a JObject and sort its properties
         var sortedObj = SortProperties(JObject.Parse(dataStr));
 
-        // Convert the sorted JObject to a compact JSON string and return it
-        return sortedObj.ToString(Formatting.None);
+        // Convert the sorted JObject to a compact JSON string
+        var jsonString = sortedObj.ToString(Formatting.None);
+
+        // Replace special characters
+        jsonString = jsonString.Replace("<", "\\u003c").Replace(">", "\\u003e").Replace("&", "\\u0026");
+
+        return jsonString;
     }
 
     /// <summary>
@@ -182,13 +187,17 @@ public static class SignatureHelper
         // Add the properties back to the JObject in alphabetical order
         foreach (var prop in properties.OrderBy(p => p.Name))
         {
-            jObj.Add(prop.Name, prop.Value);
-
             // If the property value is another JObject, recursively sort its properties
-            if (prop.Value is JObject nestedObject) SortProperties(nestedObject);
+            if (prop.Value is JObject nestedObject)
+            {
+                SortProperties(nestedObject);
+            }
+
+            jObj.Add(prop.Name, prop.Value);
         }
 
         // Return the JObject with sorted properties
         return jObj;
     }
+
 }
