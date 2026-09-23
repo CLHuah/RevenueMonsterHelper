@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RevenueMonsterHelper/RevenueMonsterLibrary.csproj" />
+  <Project Path="RevenueMonsterLibrary.Tests/RevenueMonsterLibrary.Tests.csproj" />
+</Solution>

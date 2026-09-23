@@ -7,14 +7,22 @@ A .NET library for integrating with Revenue Monster's payment API services. This
 - Base64 encoding/decoding utilities
 - RSA key handling (PEM format support)
 - Digital signature generation and verification
+- Random nonce generation
 - Payment transaction models
 
 ## Installation
 
-Add the library to your .NET project:
+The package is not published to NuGet. Reference the project directly:
 
 ```sh
-dotnet add package RevenueMonsterLibrary
+dotnet add reference path/to/RevenueMonsterHelper/RevenueMonsterLibrary.csproj
+```
+
+Or build the DLL and reference it:
+
+```sh
+dotnet build RevenueMonsterLibrary.slnx -c Release
+# Output: RevenueMonsterHelper/bin/Release/net10.0/RevenueMonsterLibrary.dll
 ```
 
 ## Usage
@@ -28,7 +36,7 @@ using RevenueMonsterLibrary.Helper;
 string signature = SignatureHelper.GenerateSignature(
     data: payload,
     method: "POST", 
-    nonceStr: "RANDOM_STRING",
+    nonceStr: RandomString.GenerateRandomString(32),
     privateKey: "YOUR_PRIVATE_KEY",
     requestUrl: "API_ENDPOINT",
     signType: "SHA256",
@@ -53,10 +61,24 @@ bool isValid = SignatureHelper.VerifySignature(
 );
 ```
 
+Loading an RSA key from PEM
+
+```cs
+using System.Security.Cryptography;
+using RevenueMonsterLibrary.Helper;
+
+// Supports "RSA PRIVATE KEY", "PRIVATE KEY", "PUBLIC KEY" and "RSA PUBLIC KEY" PEM blocks
+using RSA rsa = PemKeyHelper.CreateRSAFromPem(File.ReadAllText("private.pem"));
+byte[] signed = rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+```
+
 ## Requirements
-* .NET 9.0 or higher
-* Newtonsoft.Json 13.0.3 or higher
-* Portable.BouncyCastle 1.9.0 or higher
+* .NET 10.0 or higher
+* Newtonsoft.Json 13.0.4 or higher (used by the model attributes)
 
 ## Testing
-* The project includes MSTest unit tests. Run tests using:
+The project includes MSTest unit tests. Run them from the repository root:
+
+```sh
+dotnet test RevenueMonsterLibrary.slnx
+```
