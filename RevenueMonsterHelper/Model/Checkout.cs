@@ -148,7 +148,7 @@ public class CheckoutByMethodResult
 {
     public string data { get; set; }
     public CheckoutQrCode qrcode { get; set; }
-    public TransactionQuickPay transaction { get; set; }
+    public PaymentTransaction transaction { get; set; }
     public string type { get; set; }
     public string url { get; set; }
 }
