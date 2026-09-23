@@ -54,8 +54,9 @@ bool isValid = SignatureHelper.VerifySignature(
 ```
 
 ## Requirements
-* .NET 8.0 or higher
+* .NET 9.0 or higher
 * Newtonsoft.Json 13.0.3 or higher
+* Portable.BouncyCastle 1.9.0 or higher
 
 ## Testing
 * The project includes MSTest unit tests. Run tests using:
