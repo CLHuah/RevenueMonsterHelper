@@ -6,10 +6,11 @@ namespace RevenueMonsterLibrary.Tests.Fakes;
 /// <summary>
 ///     Records every request and answers it with the response from <paramref name="responder" />.
 /// </summary>
-internal sealed class FakeHttpMessageHandler(Func<RecordedRequest, HttpResponseMessage> responder)
-    : HttpMessageHandler
+internal sealed class FakeHttpMessageHandler(Func<RecordedRequest, HttpResponseMessage> responder) : HttpMessageHandler
 {
     private readonly List<RecordedRequest> _requests = [];
+
+    public IReadOnlyList<RecordedRequest> ApiRequests => Requests.Where(r => !r.IsTokenRequest).ToList();
 
     public IReadOnlyList<RecordedRequest> Requests
     {
@@ -24,20 +25,19 @@ internal sealed class FakeHttpMessageHandler(Func<RecordedRequest, HttpResponseM
 
     public IReadOnlyList<RecordedRequest> TokenRequests => Requests.Where(r => r.IsTokenRequest).ToList();
 
-    public IReadOnlyList<RecordedRequest> ApiRequests => Requests.Where(r => !r.IsTokenRequest).ToList();
-
     public static HttpResponseMessage Json(HttpStatusCode statusCode, string json)
     {
-        return new HttpResponseMessage(statusCode) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        return new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
         // Capture everything now; the request and its content are disposed once the client is done with them
-        var recorded = new RecordedRequest(
-            request.Method,
-            request.RequestUri!,
+        var recorded = new RecordedRequest(request.Method, request.RequestUri!,
             request.Headers.ToDictionary(header => header.Key, header => string.Join(",", header.Value)),
             request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken));
 

@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace RevenueMonsterLibrary.Model;
+﻿namespace RevenueMonsterLibrary.Model;
 
 public class IssueVoucher
 {

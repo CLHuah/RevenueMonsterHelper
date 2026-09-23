@@ -1,6 +1,6 @@
+using RevenueMonsterLibrary.Model;
 using System;
 using System.Net;
-using RevenueMonsterLibrary.Model;
 
 namespace RevenueMonsterLibrary.Client;
 
@@ -18,11 +18,6 @@ public sealed class RevenueMonsterException : Exception
     }
 
     /// <summary>
-    ///     The HTTP status code of the response.
-    /// </summary>
-    public HttpStatusCode StatusCode { get; }
-
-    /// <summary>
     ///     The error returned by Revenue Monster, or null when the response did not contain one.
     /// </summary>
     public Error Error { get; }
@@ -36,4 +31,9 @@ public sealed class RevenueMonsterException : Exception
     ///     The raw response body.
     /// </summary>
     public string ResponseBody { get; }
+
+    /// <summary>
+    ///     The HTTP status code of the response.
+    /// </summary>
+    public HttpStatusCode StatusCode { get; }
 }

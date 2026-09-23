@@ -1,34 +1,24 @@
-﻿using System.Text.Json;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RevenueMonsterLibrary.Model;
+using System.Text.Json;
 
 namespace RevenueMonsterLibrary.Tests.TestCases;
 
 [TestClass]
 public class SignatureHelperTests
 {
-    private const string Method = "post";
-    private const string NonceStr = "VYNknZohxwicZMaWbNdBKUrnrxDtaRhN";
-    private const string RequestUrl = "https://sb-open.revenuemonster.my/v3/payment/online";
-    private const string SignType = "sha256";
-    private const string Timestamp = "1528450585";
-
     // Reference signature produced independently with OpenSSL over the same input:
     //   printf '%s' "data=<base64 compact json>&method=post&nonceStr=...&timestamp=1528450585" |
     //     openssl dgst -sha256 -sign private.pem | base64
     private const string ExpectedSignature =
         "L+9xMTlg7mg9XqdkG1jz2Kzjz4wyyFLHzXpbf9wl1H58WC6qb+Wr9s8l8osqwsYsBfKfU957rEZFf9FvdPZ98uuS7xF5/7R00l8zJb0ZVab+8ZDmeg6a2ymiYvR0hSADrakhF69Fef8on63CYvy2bxEyLftTqvpQTactVOWEXPmIZkkTd/Dx+qMbuTtbFzE4ETOV67g7F6T6s+1WMNMH86YSOc9m5KCKppjHbL+CtxqZDlBdCfcKoDSVYPwae8zsw0GiBTuya2K0ehL+www1kv2sTmYeXXzbijuWmqu6BZH5SOnYKRpk3RlW9MeaEEmICQ30z2uQbUbq30gGyqBJSw==";
 
-    private static readonly object SignedPayload = new
-    {
-        storeId = "123",
-        order = new
-        {
-            title = "A&B",
-            amount = 100
-        }
-    };
+    private const string Method = "post";
+    private const string NonceStr = "VYNknZohxwicZMaWbNdBKUrnrxDtaRhN";
+    private const string RequestUrl = "https://sb-open.revenuemonster.my/v3/payment/online";
+    private const string SignType = "sha256";
+    private const string Timestamp = "1528450585";
 
     // A webhook body in the order and layout it arrives in, including a property no model declares
     private const string WebhookBody = """
@@ -45,14 +35,73 @@ public class SignatureHelperTests
     private const string WebhookCanonicalJson =
         """{"data":{"extraInfo":{"card":{}},"order":{"amount":1865,"id":"o1"},"status":"SUCCESS"},"eventType":"PAYMENT"}""";
 
+    private static readonly object SignedPayload = new { storeId = "123", order = new { title = "A&B", amount = 100 } };
+
     [TestMethod]
-    public void GenerateCompactJsonFromRaw_WebhookBody_KeepsEveryPropertySorted()
+    [DataRow(null)]
+    [DataRow("")]
+    [DataRow("{}")]
+    [DataRow("null")]
+    public void BuildSignatureInput_EmptyBody_LeavesOutData(string? compactJson)
     {
         // Act
-        var result = SignatureHelper.GenerateCompactJsonFromRaw(WebhookBody);
+        var result = SignatureHelper.BuildSignatureInput(compactJson, "get", NonceStr, RequestUrl, SignType, Timestamp);
 
         // Assert
-        Assert.AreEqual(WebhookCanonicalJson, result);
+        Assert.AreEqual(
+            $"method=get&nonceStr={NonceStr}&requestUrl={RequestUrl}&signType={SignType}&timestamp={Timestamp}",
+            result);
+    }
+
+    [TestMethod]
+    public void BuildSignatureInput_EmptyRequestUrl_LeavesOutRequestUrl()
+    {
+        // Act
+        var result = SignatureHelper.BuildSignatureInput(null, "get", NonceStr, "", SignType, Timestamp);
+
+        // Assert
+        Assert.AreEqual($"method=get&nonceStr={NonceStr}&signType={SignType}&timestamp={Timestamp}", result);
+    }
+
+    [TestMethod]
+    public void BuildSignatureInput_UppercaseMethod_IsLowercased()
+    {
+        // Act
+        var result = SignatureHelper.BuildSignatureInput("{\"a\":1}", "POST", NonceStr, RequestUrl, SignType,
+            Timestamp);
+
+        // Assert
+        Assert.AreEqual(
+            $"data=eyJhIjoxfQ==&method=post&nonceStr={NonceStr}&requestUrl={RequestUrl}&signType={SignType}&timestamp={Timestamp}",
+            result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJson_ComplexObject_ReturnsSortedAndEscapedResult()
+    {
+        // Arrange
+        var testObject = new
+        {
+            zValue = "last", specialText = "a<b>&c", nested = new { b = 2, a = 1 }, aValue = "first"
+        };
+
+        // Act
+        var result = SignatureHelper.GenerateCompactJson(testObject);
+
+        // Assert
+        Assert.AreEqual(
+            "{\"aValue\":\"first\",\"nested\":{\"a\":1,\"b\":2},\"specialText\":\"a\\u003cb\\u003e\\u0026c\",\"zValue\":\"last\"}",
+            result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJson_DecimalAndFloatProperties_UseCanonicalFormat()
+    {
+        // Act - JsonConvert writes these as 100.0, 1.0 and 0.25 in the request body
+        var result = SignatureHelper.GenerateCompactJson(new { amount = 100m, day = 1f, rate = 0.25m });
+
+        // Assert
+        Assert.AreEqual("{\"amount\":100,\"day\":1,\"rate\":0.25}", result);
     }
 
     [TestMethod]
@@ -79,16 +128,26 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void GenerateCompactJsonFromRaw_DateStrings_AreKeptAsSent()
+    public void GenerateCompactJson_LineSeparatorsAndControlCharacters_AreEscaped()
     {
-        // Arrange
-        const string body = """{"createdAt":"2023-01-01T00:00:00.000Z","updatedAt":"2023-01-01T08:00:00+08:00"}""";
+        // Arrange - U+2028 and U+2029 are built from code points to keep them out of the source text
+        var text = "a" + (char)0x2028 + "b" + (char)0x2029 + "c\n\t" + (char)0x01;
 
         // Act
-        var result = SignatureHelper.GenerateCompactJsonFromRaw(body);
+        var result = SignatureHelper.GenerateCompactJson(new { text });
 
         // Assert
-        Assert.AreEqual(body, result);
+        Assert.AreEqual("{\"text\":\"a\\u2028b\\u2029c\\n\\t\\u0001\"}", result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJson_MixedCaseKeys_AreSortedByOrdinal()
+    {
+        // Act
+        var result = SignatureHelper.GenerateCompactJson(new { b = 1, B = 2, a = 3 });
+
+        // Assert
+        Assert.AreEqual("{\"B\":2,\"a\":3,\"b\":1}", result);
     }
 
     [TestMethod]
@@ -102,16 +161,10 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void GenerateCompactJson_LineSeparatorsAndControlCharacters_AreEscaped()
+    public void GenerateCompactJson_NullInput_ShouldThrowException()
     {
-        // Arrange - U+2028 and U+2029 are built from code points to keep them out of the source text
-        var text = "a" + (char)0x2028 + "b" + (char)0x2029 + "c\n\t" + (char)0x01;
-
-        // Act
-        var result = SignatureHelper.GenerateCompactJson(new { text });
-
-        // Assert
-        Assert.AreEqual("{\"text\":\"a\\u2028b\\u2029c\\n\\t\\u0001\"}", result);
+        // Act & Assert
+        Assert.ThrowsExactly<ArgumentNullException>(() => SignatureHelper.GenerateCompactJson(null!));
     }
 
     [TestMethod]
@@ -163,8 +216,7 @@ public class SignatureHelperTests
         // Act
         var result = SignatureHelper.GenerateCompactJson(new
         {
-            items = new[] { new { b = 1, a = 2 } },
-            tags = new[] { "z", "a" }
+            items = new[] { new { b = 1, a = 2 } }, tags = new[] { "z", "a" }
         });
 
         // Assert - array order is kept, object keys are sorted
@@ -172,13 +224,48 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void GenerateCompactJson_MixedCaseKeys_AreSortedByOrdinal()
+    public void GenerateCompactJson_ShouldReturnSortedJson()
     {
+        // Arrange
+        var testData = new OuterClass
+        {
+            OuterId = 2, OuterName = "Outer", Inner = new InnerClass { InnerId = 1, InnerName = "Inner" }
+        };
+
         // Act
-        var result = SignatureHelper.GenerateCompactJson(new { b = 1, B = 2, a = 3 });
+        var result = SignatureHelper.GenerateCompactJson(testData);
 
         // Assert
-        Assert.AreEqual("{\"B\":2,\"a\":3,\"b\":1}", result);
+        const string expectedJson =
+            "{\"Inner\":{\"InnerId\":1,\"InnerName\":\"Inner\"},\"OuterId\":2,\"OuterName\":\"Outer\"}";
+
+        Assert.AreEqual(expectedJson, result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJson_SpecialCharacters_ReturnsEscapedCharacters()
+    {
+        // Arrange
+        var testObject = new { text = "a<b>c&d" };
+
+        // Act
+        var result = SignatureHelper.GenerateCompactJson(testObject);
+
+        // Assert
+        Assert.AreEqual("{\"text\":\"a\\u003cb\\u003ec\\u0026d\"}", result);
+    }
+
+    [TestMethod]
+    public void GenerateCompactJsonFromRaw_DateStrings_AreKeptAsSent()
+    {
+        // Arrange
+        const string body = """{"createdAt":"2023-01-01T00:00:00.000Z","updatedAt":"2023-01-01T08:00:00+08:00"}""";
+
+        // Act
+        var result = SignatureHelper.GenerateCompactJsonFromRaw(body);
+
+        // Assert
+        Assert.AreEqual(body, result);
     }
 
     [TestMethod]
@@ -201,52 +288,37 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void GenerateCompactJson_DecimalAndFloatProperties_UseCanonicalFormat()
+    public void GenerateCompactJsonFromRaw_WebhookBody_KeepsEveryPropertySorted()
     {
-        // Act - JsonConvert writes these as 100.0, 1.0 and 0.25 in the request body
-        var result = SignatureHelper.GenerateCompactJson(new { amount = 100m, day = 1f, rate = 0.25m });
+        // Act
+        var result = SignatureHelper.GenerateCompactJsonFromRaw(WebhookBody);
 
         // Assert
-        Assert.AreEqual("{\"amount\":100,\"day\":1,\"rate\":0.25}", result);
+        Assert.AreEqual(WebhookCanonicalJson, result);
     }
 
     [TestMethod]
-    [DataRow(null)]
-    [DataRow("")]
-    [DataRow("{}")]
-    [DataRow("null")]
-    public void BuildSignatureInput_EmptyBody_LeavesOutData(string? compactJson)
+    public void GenerateSignature_EmptyObjectBody_SignsLikeNoBody()
     {
         // Act
-        var result = SignatureHelper.BuildSignatureInput(compactJson, "get", NonceStr, RequestUrl, SignType, Timestamp);
+        var withEmptyObject = SignatureHelper.GenerateSignature(new { }, "get", NonceStr, TestKeys.PrivateKey,
+            RequestUrl, SignType, Timestamp);
+        var withoutBody = SignatureHelper.GenerateSignature((object?)null, "get", NonceStr, TestKeys.PrivateKey,
+            RequestUrl, SignType, Timestamp);
 
         // Assert
-        Assert.AreEqual(
-            $"method=get&nonceStr={NonceStr}&requestUrl={RequestUrl}&signType={SignType}&timestamp={Timestamp}",
-            result);
+        Assert.AreEqual(withoutBody, withEmptyObject);
     }
 
     [TestMethod]
-    public void BuildSignatureInput_EmptyRequestUrl_LeavesOutRequestUrl()
+    public void GenerateSignature_KnownPayload_MatchesOpenSslReferenceSignature()
     {
         // Act
-        var result = SignatureHelper.BuildSignatureInput(null, "get", NonceStr, "", SignType, Timestamp);
+        var signature = SignatureHelper.GenerateSignature(SignedPayload, Method, NonceStr, TestKeys.PrivateKey,
+            RequestUrl, SignType, Timestamp);
 
         // Assert
-        Assert.AreEqual($"method=get&nonceStr={NonceStr}&signType={SignType}&timestamp={Timestamp}", result);
-    }
-
-    [TestMethod]
-    public void BuildSignatureInput_UppercaseMethod_IsLowercased()
-    {
-        // Act
-        var result = SignatureHelper.BuildSignatureInput("{\"a\":1}", "POST", NonceStr, RequestUrl, SignType,
-            Timestamp);
-
-        // Assert
-        Assert.AreEqual(
-            $"data=eyJhIjoxfQ==&method=post&nonceStr={NonceStr}&requestUrl={RequestUrl}&signType={SignType}&timestamp={Timestamp}",
-            result);
+        Assert.AreEqual(ExpectedSignature, signature);
     }
 
     [TestMethod]
@@ -261,16 +333,94 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void GenerateSignature_EmptyObjectBody_SignsLikeNoBody()
+    public void SignRequest_KnownPayload_ReturnsCanonicalBodyAndReferenceSignature()
     {
         // Act
-        var withEmptyObject = SignatureHelper.GenerateSignature(new { }, "get", NonceStr, TestKeys.PrivateKey,
-            RequestUrl, SignType, Timestamp);
-        var withoutBody = SignatureHelper.GenerateSignature((object?)null, "get", NonceStr, TestKeys.PrivateKey,
-            RequestUrl, SignType, Timestamp);
+        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey, NonceStr,
+            Timestamp);
 
         // Assert
-        Assert.AreEqual(withoutBody, withEmptyObject);
+        Assert.AreEqual("{\"order\":{\"amount\":100,\"title\":\"A\\u0026B\"},\"storeId\":\"123\"}", signed.Body);
+        Assert.AreEqual(NonceStr, signed.NonceStr);
+        Assert.AreEqual(Timestamp, signed.Timestamp);
+        Assert.AreEqual(ExpectedSignature, signed.Signature);
+        Assert.AreEqual($"sha256 {ExpectedSignature}", signed.SignatureHeader);
+    }
+
+    [TestMethod]
+    public void SignRequest_NoBody_HasNoBody()
+    {
+        // Act
+        var signed = SignatureHelper.SignRequest(null, "GET", RequestUrl, TestKeys.PrivateKey, NonceStr, Timestamp);
+
+        // Assert
+        Assert.IsNull(signed.Body);
+        Assert.IsTrue(SignatureHelper.VerifyWebhook(null, "GET", RequestUrl, NonceStr, Timestamp,
+            signed.SignatureHeader, TestKeys.PublicKey));
+    }
+
+    [TestMethod]
+    public void SignRequest_WithoutNonceAndTimestamp_GeneratesThem()
+    {
+        // Act
+        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey);
+
+        // Assert
+        Assert.AreEqual(32, signed.NonceStr.Length);
+        var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(signed.Timestamp));
+        Assert.IsLessThan(TimeSpan.FromMinutes(1), (DateTimeOffset.UtcNow - timestamp).Duration());
+    }
+
+    [TestMethod]
+    public void VerifySignature_JObjectBody_ReturnsTrue()
+    {
+        // Arrange
+        var body = JObject.Parse("""{"storeId":"123","order":{"title":"A&B","amount":100}}""");
+
+        // Act
+        var isValid = SignatureHelper.VerifySignature(body, Method, NonceStr, TestKeys.PublicKey, RequestUrl, SignType,
+            Timestamp, ExpectedSignature);
+
+        // Assert
+        Assert.IsTrue(isValid);
+    }
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("not base64!")]
+    public void VerifySignature_MalformedSignature_ReturnsFalse(string signature)
+    {
+        // Act
+        var isValid = SignatureHelper.VerifySignature(SignedPayload, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
+            SignType, Timestamp, signature);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void VerifySignature_OpenSslReferenceSignature_ReturnsTrue()
+    {
+        // Act
+        var isValid = SignatureHelper.VerifySignature(SignedPayload, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
+            SignType, Timestamp, ExpectedSignature);
+
+        // Assert
+        Assert.IsTrue(isValid);
+    }
+
+    [TestMethod]
+    public void VerifySignature_TamperedPayload_ReturnsFalse()
+    {
+        // Arrange
+        var tampered = new { storeId = "123", order = new { title = "A&B", amount = 999 } };
+
+        // Act
+        var isValid = SignatureHelper.VerifySignature(tampered, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
+            SignType, Timestamp, ExpectedSignature);
+
+        // Assert
+        Assert.IsFalse(isValid);
     }
 
     [TestMethod]
@@ -307,178 +457,22 @@ public class SignatureHelperTests
     }
 
     [TestMethod]
-    public void VerifySignature_JObjectBody_ReturnsTrue()
-    {
-        // Arrange
-        var body = JObject.Parse("""{"storeId":"123","order":{"title":"A&B","amount":100}}""");
-
-        // Act
-        var isValid = SignatureHelper.VerifySignature(body, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
-            SignType, Timestamp, ExpectedSignature);
-
-        // Assert
-        Assert.IsTrue(isValid);
-    }
-
-    [TestMethod]
+    [DataRow(null)]
     [DataRow("")]
-    [DataRow("not base64!")]
-    public void VerifySignature_MalformedSignature_ReturnsFalse(string signature)
+    [DataRow("sha256")]
+    [DataRow(ExpectedSignature)]
+    [DataRow("sha1 " + ExpectedSignature)]
+    public void VerifyWebhook_MalformedSignatureHeader_ReturnsFalse(string? signatureHeader)
     {
+        // Arrange
+        const string rawBody = """{"storeId":"123","order":{"title":"A&B","amount":100}}""";
+
         // Act
-        var isValid = SignatureHelper.VerifySignature(SignedPayload, Method, NonceStr, TestKeys.PublicKey,
-            RequestUrl, SignType, Timestamp, signature);
+        var isValid = SignatureHelper.VerifyWebhook(rawBody, "POST", RequestUrl, NonceStr, Timestamp, signatureHeader,
+            TestKeys.PublicKey);
 
         // Assert
         Assert.IsFalse(isValid);
-    }
-
-    [TestMethod]
-    public void GenerateSignature_KnownPayload_MatchesOpenSslReferenceSignature()
-    {
-        // Act
-        var signature = SignatureHelper.GenerateSignature(SignedPayload, Method, NonceStr, TestKeys.PrivateKey,
-            RequestUrl, SignType, Timestamp);
-
-        // Assert
-        Assert.AreEqual(ExpectedSignature, signature);
-    }
-
-    [TestMethod]
-    public void VerifySignature_OpenSslReferenceSignature_ReturnsTrue()
-    {
-        // Act
-        var isValid = SignatureHelper.VerifySignature(SignedPayload, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
-            SignType, Timestamp, ExpectedSignature);
-
-        // Assert
-        Assert.IsTrue(isValid);
-    }
-
-    [TestMethod]
-    public void VerifySignature_TamperedPayload_ReturnsFalse()
-    {
-        // Arrange
-        var tampered = new { storeId = "123", order = new { title = "A&B", amount = 999 } };
-
-        // Act
-        var isValid = SignatureHelper.VerifySignature(tampered, Method, NonceStr, TestKeys.PublicKey, RequestUrl,
-            SignType, Timestamp, ExpectedSignature);
-
-        // Assert
-        Assert.IsFalse(isValid);
-    }
-
-    [TestMethod]
-    public void GenerateCompactJson_ComplexObject_ReturnsSortedAndEscapedResult()
-    {
-        // Arrange
-        var testObject = new
-        {
-            zValue = "last",
-            specialText = "a<b>&c",
-            nested = new
-            {
-                b = 2,
-                a = 1
-            },
-            aValue = "first"
-        };
-
-        // Act
-        var result = SignatureHelper.GenerateCompactJson(testObject);
-
-        // Assert
-        Assert.AreEqual(
-            "{\"aValue\":\"first\",\"nested\":{\"a\":1,\"b\":2},\"specialText\":\"a\\u003cb\\u003e\\u0026c\",\"zValue\":\"last\"}",
-            result);
-    }
-
-    [TestMethod]
-    public void GenerateCompactJson_NullInput_ShouldThrowException()
-    {
-        // Act & Assert
-        Assert.ThrowsExactly<ArgumentNullException>(() => SignatureHelper.GenerateCompactJson(null!));
-    }
-
-    [TestMethod]
-    public void GenerateCompactJson_ShouldReturnSortedJson()
-    {
-        // Arrange
-        var testData = new OuterClass
-        {
-            OuterId = 2,
-            OuterName = "Outer",
-            Inner = new InnerClass
-            {
-                InnerId = 1,
-                InnerName = "Inner"
-            }
-        };
-
-        // Act
-        var result = SignatureHelper.GenerateCompactJson(testData);
-
-        // Assert
-        const string expectedJson =
-            "{\"Inner\":{\"InnerId\":1,\"InnerName\":\"Inner\"},\"OuterId\":2,\"OuterName\":\"Outer\"}";
-
-        Assert.AreEqual(expectedJson, result);
-    }
-
-    [TestMethod]
-    public void GenerateCompactJson_SpecialCharacters_ReturnsEscapedCharacters()
-    {
-        // Arrange
-        var testObject = new
-        {
-            text = "a<b>c&d"
-        };
-
-        // Act
-        var result = SignatureHelper.GenerateCompactJson(testObject);
-
-        // Assert
-        Assert.AreEqual("{\"text\":\"a\\u003cb\\u003ec\\u0026d\"}", result);
-    }
-
-    [TestMethod]
-    public void SignRequest_KnownPayload_ReturnsCanonicalBodyAndReferenceSignature()
-    {
-        // Act
-        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey, NonceStr,
-            Timestamp);
-
-        // Assert
-        Assert.AreEqual("{\"order\":{\"amount\":100,\"title\":\"A\\u0026B\"},\"storeId\":\"123\"}", signed.Body);
-        Assert.AreEqual(NonceStr, signed.NonceStr);
-        Assert.AreEqual(Timestamp, signed.Timestamp);
-        Assert.AreEqual(ExpectedSignature, signed.Signature);
-        Assert.AreEqual($"sha256 {ExpectedSignature}", signed.SignatureHeader);
-    }
-
-    [TestMethod]
-    public void SignRequest_WithoutNonceAndTimestamp_GeneratesThem()
-    {
-        // Act
-        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey);
-
-        // Assert
-        Assert.AreEqual(32, signed.NonceStr.Length);
-        var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(signed.Timestamp));
-        Assert.IsLessThan(TimeSpan.FromMinutes(1), (DateTimeOffset.UtcNow - timestamp).Duration());
-    }
-
-    [TestMethod]
-    public void SignRequest_NoBody_HasNoBody()
-    {
-        // Act
-        var signed = SignatureHelper.SignRequest(null, "GET", RequestUrl, TestKeys.PrivateKey, NonceStr, Timestamp);
-
-        // Assert
-        Assert.IsNull(signed.Body);
-        Assert.IsTrue(SignatureHelper.VerifyWebhook(null, "GET", RequestUrl, NonceStr, Timestamp,
-            signed.SignatureHeader, TestKeys.PublicKey));
     }
 
     [TestMethod]
@@ -493,25 +487,6 @@ public class SignatureHelperTests
 
         // Assert
         Assert.IsTrue(isValid);
-    }
-
-    [TestMethod]
-    [DataRow(null)]
-    [DataRow("")]
-    [DataRow("sha256")]
-    [DataRow(ExpectedSignature)]
-    [DataRow("sha1 " + ExpectedSignature)]
-    public void VerifyWebhook_MalformedSignatureHeader_ReturnsFalse(string? signatureHeader)
-    {
-        // Arrange
-        const string rawBody = """{"storeId":"123","order":{"title":"A&B","amount":100}}""";
-
-        // Act
-        var isValid = SignatureHelper.VerifyWebhook(rawBody, "POST", RequestUrl, NonceStr, Timestamp,
-            signatureHeader, TestKeys.PublicKey);
-
-        // Assert
-        Assert.IsFalse(isValid);
     }
 
     // Define a sample class for testing

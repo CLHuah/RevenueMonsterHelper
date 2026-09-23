@@ -38,7 +38,7 @@ public class RandomStringTests
             var result = RandomString.GenerateRandomString(10);
 
             // Assert uniqueness
-            Assert.IsFalse(generatedStrings.Contains(result), $"Duplicate string generated: {result}");
+            Assert.DoesNotContain(result, generatedStrings, $"Duplicate string generated: {result}");
 
             // Add to the set for future comparison
             generatedStrings.Add(result);

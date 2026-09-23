@@ -73,10 +73,9 @@ public class TransactionQuickPay : PaymentTransaction
 /// </summary>
 public class TransactionExtraInfo
 {
-    public List<ExtraFee> extraFee { get; set; }
+    [JsonExtensionData] public IDictionary<string, JToken> extensionData { get; set; }
 
-    [JsonExtensionData]
-    public IDictionary<string, JToken> extensionData { get; set; }
+    public List<ExtraFee> extraFee { get; set; }
 }
 
 /// <summary>

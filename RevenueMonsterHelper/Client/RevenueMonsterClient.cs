@@ -1,3 +1,7 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RevenueMonsterLibrary.Helper;
+using RevenueMonsterLibrary.Model;
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -7,10 +11,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using RevenueMonsterLibrary.Helper;
-using RevenueMonsterLibrary.Model;
 
 namespace RevenueMonsterLibrary.Client;
 
@@ -53,14 +53,13 @@ public sealed class RevenueMonsterClient
     ///     <c>services.AddHttpClient&lt;RevenueMonsterClient&gt;()</c> once <see cref="RevenueMonsterOptions" /> is
     ///     registered.
     /// </remarks>
-    public RevenueMonsterClient(HttpClient httpClient, RevenueMonsterOptions options,
-        TimeProvider timeProvider = null)
+    public RevenueMonsterClient(HttpClient httpClient, RevenueMonsterOptions options, TimeProvider timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientId, "options.ClientId");
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientSecret, "options.ClientSecret");
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.PrivateKey, "options.PrivateKey");
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ClientSecret);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.PrivateKey);
 
         _httpClient = httpClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -71,6 +70,35 @@ public sealed class RevenueMonsterClient
         _basicCredentials = Encode.Base64Encode($"{options.ClientId}:{options.ClientSecret}");
         _tokenCache = TokenCaches.GetOrAdd($"{_oauthBaseUrl}\n{options.ClientId}\n{options.ClientSecret}",
             _ => new TokenCache());
+    }
+
+    /// <summary>
+    ///     An access token, its refresh token and when to renew it.
+    /// </summary>
+    private sealed record CachedToken(string AccessToken, string RefreshToken, DateTimeOffset RenewAt);
+
+    /// <summary>
+    ///     The access token for one set of credentials, shared by every client using them.
+    /// </summary>
+    private sealed class TokenCache
+    {
+        public readonly SemaphoreSlim Lock = new(1, 1);
+        private volatile CachedToken _token;
+
+        public CachedToken Token
+        {
+            get => _token;
+            set => _token = value;
+        }
+
+        /// <summary>
+        ///     Drops the cached token if it is still <paramref name="accessToken" />.
+        /// </summary>
+        public void Invalidate(string accessToken)
+        {
+            var current = _token;
+            if (current?.AccessToken == accessToken) Interlocked.CompareExchange(ref _token, null, current);
+        }
     }
 
     #region Access tokens
@@ -125,8 +153,7 @@ public sealed class RevenueMonsterClient
     ///     Requests a new access token with the client credentials. The token is not cached; use
     ///     <see cref="GetAccessTokenAsync" /> for that.
     /// </summary>
-    public Task<ClientCredentials> GetAccessTokenByClientCredentialsAsync(
-        CancellationToken cancellationToken = default)
+    public Task<ClientCredentials> GetAccessTokenByClientCredentialsAsync(CancellationToken cancellationToken = default)
     {
         return RequestTokenAsync(new { grantType = "client_credentials" }, cancellationToken);
     }
@@ -155,8 +182,7 @@ public sealed class RevenueMonsterClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<WebPaymentResponse>(HttpMethod.Post, "/payment/online", request,
-            cancellationToken);
+        return SendApiRequestAsync<WebPaymentResponse>(HttpMethod.Post, "/payment/online", request, cancellationToken);
     }
 
     /// <summary>
@@ -179,18 +205,16 @@ public sealed class RevenueMonsterClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<CheckoutByMethodResponse>(HttpMethod.Post, "/payment/online/checkout",
-            request, cancellationToken);
+        return SendApiRequestAsync<CheckoutByMethodResponse>(HttpMethod.Post, "/payment/online/checkout", request,
+            cancellationToken);
     }
 
     /// <summary>
     ///     Gets the banks available for FPX payments, keyed by bank code.
     /// </summary>
-    public Task<FpxBankListResponse> GetFpxBanksAsync(
-        CancellationToken cancellationToken = default)
+    public Task<FpxBankListResponse> GetFpxBanksAsync(CancellationToken cancellationToken = default)
     {
-        return SendApiRequestAsync<FpxBankListResponse>(HttpMethod.Get, "/payment/fpx-bank",
-            null, cancellationToken);
+        return SendApiRequestAsync<FpxBankListResponse>(HttpMethod.Get, "/payment/fpx-bank", null, cancellationToken);
     }
 
     #endregion
@@ -200,13 +224,11 @@ public sealed class RevenueMonsterClient
     /// <summary>
     ///     Charges a customer by the payment code shown in their wallet app.
     /// </summary>
-    public Task<QuickPayResponse> CreateQuickPayAsync(QuickPay request,
-        CancellationToken cancellationToken = default)
+    public Task<QuickPayResponse> CreateQuickPayAsync(QuickPay request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<QuickPayResponse>(HttpMethod.Post, "/payment/quickpay", request,
-            cancellationToken);
+        return SendApiRequestAsync<QuickPayResponse>(HttpMethod.Post, "/payment/quickpay", request, cancellationToken);
     }
 
     /// <summary>
@@ -237,21 +259,18 @@ public sealed class RevenueMonsterClient
     ///     Refunds a transaction: returns the funds to the customer, before or after the settlement date depending on
     ///     the payment provider.
     /// </summary>
-    public Task<RefundResponse> RefundAsync(RefundRequest request,
-        CancellationToken cancellationToken = default)
+    public Task<RefundResponse> RefundAsync(RefundRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<RefundResponse>(HttpMethod.Post, "/payment/refund", request,
-            cancellationToken);
+        return SendApiRequestAsync<RefundResponse>(HttpMethod.Post, "/payment/refund", request, cancellationToken);
     }
 
     /// <summary>
     ///     Reverses (cancels) a transaction by your order ID. Only possible within a short window after the
     ///     transaction, such as 15 minutes; meant for cases like a dropped connection, to prevent double charges.
     /// </summary>
-    public Task<ReverseResponse> ReverseAsync(string orderId,
-        CancellationToken cancellationToken = default)
+    public Task<ReverseResponse> ReverseAsync(string orderId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
 
@@ -386,7 +405,7 @@ public sealed class RevenueMonsterClient
         }
 
         // An error object means the request failed, whatever the status code
-        if (json is JObject { } responseObject && responseObject["error"] is JObject errorJson)
+        if (json is JObject responseObject && responseObject["error"] is JObject errorJson)
         {
             var error = errorJson.ToObject<Error>(RawJson.Serializer);
             throw new RevenueMonsterException($"Revenue Monster returned error {error.code}: {error.message}",
@@ -405,33 +424,4 @@ public sealed class RevenueMonsterClient
     }
 
     #endregion
-
-    /// <summary>
-    ///     The access token for one set of credentials, shared by every client using them.
-    /// </summary>
-    private sealed class TokenCache
-    {
-        public readonly SemaphoreSlim Lock = new(1, 1);
-        private volatile CachedToken _token;
-
-        public CachedToken Token
-        {
-            get => _token;
-            set => _token = value;
-        }
-
-        /// <summary>
-        ///     Drops the cached token if it is still <paramref name="accessToken" />.
-        /// </summary>
-        public void Invalidate(string accessToken)
-        {
-            var current = _token;
-            if (current?.AccessToken == accessToken) Interlocked.CompareExchange(ref _token, null, current);
-        }
-    }
-
-    /// <summary>
-    ///     An access token, its refresh token and when to renew it.
-    /// </summary>
-    private sealed record CachedToken(string AccessToken, string RefreshToken, DateTimeOffset RenewAt);
 }
