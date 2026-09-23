@@ -8,39 +8,24 @@ public class IssueVoucher
     public string qrUrl { get; set; }
 }
 
-public class IssueVoucherResult
+public class IssueVoucherResult : ApiResponse<IssueVoucher>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public IssueVoucher item { get; set; }
 }
 
-public class VoidVoucherResult
+public class VoidVoucherResult : ApiResponse<Voucher>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public Voucher item { get; set; }
 }
 
-public class GetVoucherByCodeResult
+public class GetVoucherByCodeResult : ApiResponse<Voucher>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public Voucher item { get; set; }
 }
 
-public class GetVoucherBatchesResult
+public class GetVoucherBatchesResult : ApiListResponse<Voucher>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public List<Voucher> items { get; set; }
 }
 
-public class GetVoucherBatchByKeyResult
+public class GetVoucherBatchByKeyResult : ApiResponse<Voucher>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public Voucher item { get; set; }
 }
 
 public class Voucher
