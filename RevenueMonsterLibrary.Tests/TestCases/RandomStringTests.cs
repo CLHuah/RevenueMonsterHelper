@@ -9,7 +9,7 @@ public class RandomStringTests
     public void GenerateRandomString_InvalidSize_ThrowsException(int invalidSize)
     {
         // Act & Assert
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => RandomString.GenerateRandomString(invalidSize));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RandomString.GenerateRandomString(invalidSize));
     }
 
     [TestMethod]
