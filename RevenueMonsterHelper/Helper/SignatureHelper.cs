@@ -1,17 +1,31 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace RevenueMonsterLibrary.Helper;
 
-/// <summary>
-///     Signature algorithm is used to sign your payment API request with a private key to obtain additional security.
-/// </summary>
 public static class SignatureHelper
 {
+    // Defines the only supported signature algorithm type
+    private const string SupportedSignType = "SHA256";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        // Skip null properties
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+
+        // Produce compact JSON without whitespace
+        WriteIndented = false,
+        
+        // Prevent escaping of special characters
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     /// <summary>
     ///     Generates compact JSON representation of the provided object after sorting its properties.
     /// </summary>
@@ -19,185 +33,229 @@ public static class SignatureHelper
     /// <returns>Compact JSON string.</returns>
     public static string GenerateCompactJson(object data)
     {
-        // Check if the input data is null
-        if (data == null) throw new ArgumentNullException(nameof(data), "Input data cannot be null.");
+        // Validate input - throw if data is null
+        ArgumentNullException.ThrowIfNull(data);
 
-        // Serialize the object to JSON string
-        var dataStr = JsonConvert.SerializeObject(data);
+        // Convert object to JSON string using configured options
+        var jsonString = JsonSerializer.Serialize(data, JsonOptions);
 
-        // Parse the JSON string into a JObject and sort its properties
-        var sortedObj = SortProperties(JObject.Parse(dataStr));
+        // Parse JSON string into document for manipulation
+        using var document = JsonDocument.Parse(jsonString);
 
-        // Convert the sorted JObject to a compact JSON string
-        var jsonString = sortedObj.ToString(Formatting.None);
+        // Sort all properties recursively starting from root
+        var sortedJson = SortJsonNode(document.RootElement);
 
-        // Replace special characters
-        jsonString = jsonString.Replace("<", "\\u003c").Replace(">", "\\u003e").Replace("&", "\\u0026");
-
-        return jsonString;
+        // Convert back to string and escape special characters
+        return EscapeSpecialCharacters(sortedJson.ToJsonString(JsonOptions));
     }
 
     /// <summary>
     ///     Generates a digital signature based on the provided data object and parameters.
     /// </summary>
     /// <param name="data">The data object to be included in the signature.</param>
-    /// <param name="method">The HTTP method.</param>
-    /// <param name="nonceStr">The nonce string.</param>
+    /// <param name="method">The HTTP method used in the request.</param>
+    /// <param name="nonceStr">A random string to prevent replay attacks.</param>
     /// <param name="privateKey">The private key used for signing.</param>
     /// <param name="requestUrl">The request URL (optional).</param>
-    /// <param name="signType">The signature type.</param>
+    /// <param name="signType">The signature type (must be SHA256).</param>
     /// <param name="timestamp">The timestamp of the request.</param>
     /// <returns>The generated digital signature as a base64-encoded string.</returns>
     public static string GenerateSignature(object data, string method, string nonceStr, string privateKey,
         string requestUrl, string signType, string timestamp)
     {
-        // Generate compact JSON from the data object
-        var compactJson = data != null ? GenerateCompactJson(data) : null;
+        // Validate that signature type is SHA256
+        ValidateSignType(signType);
 
-        // Use the core signature generation method
-        return GenerateSignatureCore(compactJson, method, nonceStr, privateKey, requestUrl, signType, timestamp);
+        // Convert object to compact JSON if not null
+        var compactJson = data is null ? null : GenerateCompactJson(data);
+
+        // Generate signature using core method with built input string
+        return GenerateSignatureCore(
+            BuildSignatureInput(compactJson, method, nonceStr, requestUrl, signType, timestamp), privateKey);
     }
 
     /// <summary>
     ///     Generates a digital signature based on the provided compact JSON and parameters.
     /// </summary>
     /// <param name="compactJson">The compact JSON representation of the data.</param>
-    /// <param name="method">The HTTP method.</param>
-    /// <param name="nonceStr">The nonce string.</param>
+    /// <param name="method">The HTTP method used in the request.</param>
+    /// <param name="nonceStr">A random string to prevent replay attacks.</param>
     /// <param name="privateKey">The private key used for signing.</param>
     /// <param name="requestUrl">The request URL (optional).</param>
-    /// <param name="signType">The signature type.</param>
+    /// <param name="signType">The signature type (must be SHA256).</param>
     /// <param name="timestamp">The timestamp of the request.</param>
     /// <returns>The generated digital signature as a base64-encoded string.</returns>
     public static string GenerateSignature(string compactJson, string method, string nonceStr, string privateKey,
         string requestUrl, string signType, string timestamp)
     {
-        // Use the core signature generation method
-        return GenerateSignatureCore(compactJson, method, nonceStr, privateKey, requestUrl, signType, timestamp);
+        // Validate that signature type is SHA256
+        ValidateSignType(signType);
+
+        // Generate signature using core method with built input string
+        return GenerateSignatureCore(
+            BuildSignatureInput(compactJson, method, nonceStr, requestUrl, signType, timestamp), privateKey);
     }
 
     /// <summary>
-    ///     Verifies the signature based on the provided parameters.
+    ///     Verifies a digital signature using RSA-SHA256 with PKCS1 padding.
     /// </summary>
     /// <param name="data">The data to be included in the signature verification.</param>
-    /// <param name="method">The HTTP method.</param>
-    /// <param name="nonceStr">The nonce string.</param>
-    /// <param name="publicKey">The public key for signature verification.</param>
+    /// <param name="method">The HTTP method used in the request.</param>
+    /// <param name="nonceStr">A random string to prevent replay attacks.</param>
+    /// <param name="publicKey">The RSA public key in PEM format for verification.</param>
     /// <param name="requestUrl">The request URL (optional).</param>
-    /// <param name="signType">The signature type (must be "SHA256").</param>
+    /// <param name="signType">The signature algorithm type (must be SHA256).</param>
     /// <param name="timestamp">The timestamp of the request.</param>
-    /// <param name="signature">The signature to be verified.</param>
+    /// <param name="signature">The Base64-encoded signature to verify.</param>
     /// <returns>True if the signature is valid, false otherwise.</returns>
     public static bool VerifySignature(object data, string method, string nonceStr, string publicKey, string requestUrl,
         string signType, string timestamp, string signature)
     {
-        // Ensure that signType is "SHA256"
-        if (!string.Equals(signType, "SHA256", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Invalid signType. Only 'SHA256' is supported.");
+        // Ensure signature type is SHA256
+        ValidateSignType(signType);
 
-        var sb = new StringBuilder();
+        // Convert data object to compact JSON if not null
+        var compactJson = data is null ? null : GenerateCompactJson(data);
 
-        // Add data to the signature if present
-        if (data != null)
-        {
-            var encodedData = Encode.Base64Encode(GenerateCompactJson(data));
-            sb.Append($"data={encodedData}&");
-        }
+        // Create standardized string for signature verification
+        var signatureInput = BuildSignatureInput(compactJson, method, nonceStr, requestUrl, signType, timestamp);
 
-        // Add other parameters to the signature
-        sb.Append($"method={method}&");
-        sb.Append($"nonceStr={nonceStr}&");
-        if (!string.IsNullOrWhiteSpace(requestUrl)) sb.Append($"requestUrl={requestUrl}&");
-        sb.Append($"signType={signType}&");
-        sb.Append($"timestamp={timestamp}");
+        // Create RSA provider from public key PEM
+        using var provider = PemKeyHelper.CreateRSAFromPem(publicKey);
 
-        var plainText = sb.ToString();
-
-        // Convert the plain text to bytes for signature verification
-        var plainTextByte = Encoding.UTF8.GetBytes(plainText);
-
-        // Convert the signature from base64 to bytes
-        var signatureByte = Convert.FromBase64String(signature);
-
-        // Get the RSA provider from the provided public key
-        var provider = PemKeyHelper.GetRSAProviderFromPemFile(publicKey);
-
-        // Get the OID for SHA256
-        var sha256Oid = CryptoConfig.MapNameToOID("SHA256") ??
-                        throw new InvalidOperationException("Unable to retrieve OID for SHA256.");
-
-        // Verify the signature using SHA256
-        var result = provider.VerifyData(plainTextByte, sha256Oid, signatureByte);
-
-        return result;
+        // Verify signature using RSA-SHA256 with PKCS1 padding
+        return provider.VerifyData(Encoding.UTF8.GetBytes(signatureInput), // Convert input to bytes
+            Convert.FromBase64String(signature), // Decode base64 signature
+            HashAlgorithmName.SHA256, // Use SHA256 algorithm
+            RSASignaturePadding.Pkcs1); // Use PKCS1 padding
     }
 
     /// <summary>
-    ///     Generates a digital signature based on the provided parameters.
+    ///     Builds the standardized input string used for signature generation and verification.
     /// </summary>
-    /// <param name="compactJson">The compact JSON representation of the data.</param>
+    /// <param name="compactJson">The compact JSON representation of the data (can be null).</param>
     /// <param name="method">The HTTP method.</param>
     /// <param name="nonceStr">The nonce string.</param>
-    /// <param name="privateKey">The private key used for signing.</param>
-    /// <param name="requestUrl">The request URL (optional).</param>
+    /// <param name="requestUrl">The request URL.</param>
     /// <param name="signType">The signature type.</param>
-    /// <param name="timestamp">The timestamp of the request.</param>
-    /// <returns>The generated digital signature as a base64-encoded string.</returns>
-    private static string GenerateSignatureCore(string compactJson, string method, string nonceStr, string privateKey,
-        string requestUrl, string signType, string timestamp)
+    /// <param name="timestamp">The request timestamp.</param>
+    /// <returns>A concatenated string of all parameters in a specific order.</returns>
+    /// <remarks>
+    ///     The returned string format is:
+    ///     "data={base64_encoded_json}&method={method}&nonceStr={nonceStr}&requestUrl={requestUrl}&signType={signType}
+    ///     &timestamp={timestamp}"
+    ///     If compactJson is null, the data parameter is omitted.
+    /// </remarks>
+    private static string BuildSignatureInput(string? compactJson, string method, string nonceStr, string requestUrl,
+        string signType, string timestamp)
     {
-        // Ensure that signType is "SHA256"
-        if (!string.Equals(signType, "SHA256", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Invalid signType. Only 'SHA256' is supported.");
+        // Create data component if JSON exists, otherwise empty string
+        var dataComponent = compactJson is null ? "" : $"data={Encode.Base64Encode(compactJson)}&";
 
-        // Construct the plain text for signing
-        var plainText = $"{(compactJson != null ? $"data={Encode.Base64Encode(compactJson)}&" : "")}" +
-                        $"method={method}&nonceStr={nonceStr}&requestUrl={requestUrl}&signType={signType}&timestamp={timestamp}";
+        // Concatenate all parameters in specific order for consistent signature
+        return
+            $"{dataComponent}method={method}&nonceStr={nonceStr}&requestUrl={requestUrl}&signType={signType}&timestamp={timestamp}";
+    }
 
-        // Convert the plain text to bytes for signature generation
-        var plainTextByte = Encoding.UTF8.GetBytes(plainText);
+    /// <summary>
+    ///     Creates a new JsonObject with properties sorted alphabetically by name.
+    /// </summary>
+    /// <param name="element">The JsonElement to sort.</param>
+    /// <returns>A new JsonObject with sorted properties.</returns>
+    /// <remarks>
+    ///     For nested objects, the method recursively sorts their properties as well.
+    ///     For non-object values, the original JSON representation is preserved.
+    /// </remarks>
+    private static JsonObject CreateSortedObject(JsonElement element)
+    {
+        // Initialize new JSON object for sorted properties
+        var sortedObject = new JsonObject();
 
-        // Get the RSA provider from the provided private key
-        var provider = PemKeyHelper.GetRSAProviderFromPemFile(privateKey);
+        // Get all properties and sort them by name
+        var properties = element.EnumerateObject().OrderBy(p => p.Name).ToList();
 
-        // Get the OID for SHA256
-        var sha256Oid = CryptoConfig.MapNameToOID("SHA256") ??
-                        throw new InvalidOperationException("Unable to retrieve OID for SHA256.");
+        foreach (var property in properties)
+        {
+            // Handle nested objects recursively, otherwise parse as regular JSON value
+            var value = property.Value.ValueKind == JsonValueKind.Object
+                ? SortJsonNode(property.Value) // Recursively sort nested objects
+                : JsonNode.Parse(property.Value.GetRawText()); // Parse other values as-is
 
-        // Generate the digital signature using SHA256
-        var signedBytes = provider.SignData(plainTextByte, sha256Oid);
+            // Add property to sorted object
+            sortedObject.Add(property.Name, value);
+        }
 
-        // Return the base64-encoded digital signature
+        return sortedObject;
+    }
+
+    /// <summary>
+    ///     Escapes special characters in the input string by converting them to their Unicode representations.
+    /// </summary>
+    /// <param name="input">The input string containing potential special characters.</param>
+    /// <returns>A string with special characters escaped to Unicode format.</returns>
+    /// <remarks>
+    ///     Converts:
+    ///     - '&lt;' to '\u003c'
+    ///     - '&gt;' to '\u003e'
+    ///     - '&amp;' to '\u0026'
+    /// </remarks>
+    private static string EscapeSpecialCharacters(string input)
+    {
+        return input.Replace("<", "\\u003c").Replace(">", "\\u003e").Replace("&", "\\u0026");
+    }
+
+    /// <summary>
+    ///     Generates a digital signature using RSA-SHA256 with PKCS1 padding.
+    /// </summary>
+    /// <param name="signatureInput">The input string to be signed.</param>
+    /// <param name="privateKey">The RSA private key in PEM format used for signing.</param>
+    /// <returns>Base64 encoded signature string.</returns>
+    private static string GenerateSignatureCore(string signatureInput, string privateKey)
+    {
+        // Create RSA provider from the PEM-formatted private key
+        using var provider = PemKeyHelper.CreateRSAFromPem(privateKey);
+
+        // Sign the input data using SHA256 algorithm and PKCS1 padding
+        var signedBytes = provider.SignData(Encoding.UTF8.GetBytes(signatureInput), // Convert input to UTF8 bytes
+            HashAlgorithmName.SHA256, // Use SHA256 hashing algorithm
+            RSASignaturePadding.Pkcs1); // Use PKCS1 padding scheme
+
+        // Convert the signed bytes to Base64 string
         return Convert.ToBase64String(signedBytes);
     }
 
     /// <summary>
-    ///     Sorts the properties of a JSON object alphabetically.
+    ///     Sorts a JsonElement node and its children recursively.
     /// </summary>
-    /// <param name="jObj">The JSON object to be sorted.</param>
-    /// <returns>JSON object with sorted properties.</returns>
-    private static JObject SortProperties(JObject jObj)
+    /// <param name="element">The JsonElement to sort.</param>
+    /// <returns>A sorted JsonNode representation of the input element.</returns>
+    /// <remarks>
+    ///     Handles three cases:
+    ///     - Objects: Creates a new sorted object
+    ///     - Arrays: Preserves array order
+    ///     - Other values: Converts to JsonValue
+    /// </remarks>
+    private static JsonNode SortJsonNode(JsonElement element)
     {
-        // Get a list of properties from the JObject
-        var properties = jObj.Properties().ToList();
-
-        // Remove all existing properties from the JObject
-        foreach (var prop in properties) prop.Remove();
-
-        // Add the properties back to the JObject in alphabetical order
-        foreach (var prop in properties.OrderBy(p => p.Name))
+        // Use pattern matching to handle different JSON value types
+        return element.ValueKind switch
         {
-            // If the property value is another JObject, recursively sort its properties
-            if (prop.Value is JObject nestedObject)
-            {
-                SortProperties(nestedObject);
-            }
-
-            jObj.Add(prop.Name, prop.Value);
-        }
-
-        // Return the JObject with sorted properties
-        return jObj;
+            JsonValueKind.Object => CreateSortedObject(element), // Sort object properties
+            JsonValueKind.Array => JsonArray.Create(element)!, // Preserve array as-is
+            _ => JsonValue.Create(element)! // Convert primitive values
+        };
     }
 
+    /// <summary>
+    ///     Validates that the signature type matches the supported SHA256 algorithm.
+    /// </summary>
+    /// <param name="signType">The signature type to validate.</param>
+    /// <exception cref="ArgumentException">Thrown when signature type is not SHA256.</exception>
+    private static void ValidateSignType(string signType)
+    {
+        // Compare input sign type with supported type (case-insensitive)
+        if (!string.Equals(signType, SupportedSignType, StringComparison.OrdinalIgnoreCase))
+            // Throw exception if sign type is not supported
+            throw new ArgumentException($"Invalid signType. Only '{SupportedSignType}' is supported.");
+    }
 }
