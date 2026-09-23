@@ -24,9 +24,10 @@ public static class RandomString
     public static string GenerateRandomString(int size)
     {
         // Validate the size parameter and throw an exception if it is less than or equal to zero.
-        if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size), "Size must be greater than zero.");
-
-        // Pick each character uniformly from the allowed set
-        return RandomNumberGenerator.GetString(UppercaseLetters, size);
+        return size <= 0
+            ? throw new ArgumentOutOfRangeException(nameof(size), "Size must be greater than zero.")
+            :
+            // Pick each character uniformly from the allowed set
+            RandomNumberGenerator.GetString(UppercaseLetters, size);
     }
 }

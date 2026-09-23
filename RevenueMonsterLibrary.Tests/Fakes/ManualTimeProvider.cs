@@ -7,13 +7,13 @@ internal sealed class ManualTimeProvider(DateTimeOffset now) : TimeProvider
 {
     public DateTimeOffset Now { get; private set; } = now;
 
-    public override DateTimeOffset GetUtcNow()
-    {
-        return Now;
-    }
-
     public void Advance(TimeSpan duration)
     {
         Now += duration;
+    }
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        return Now;
     }
 }

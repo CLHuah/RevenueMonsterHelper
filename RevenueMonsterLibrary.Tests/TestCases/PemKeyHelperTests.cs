@@ -23,6 +23,20 @@ public class PemKeyHelperTests
     }
 
     [TestMethod]
+    public void CreateRSAFromPem_WithPkcs8PrivateKey_ReturnsRSAWithPrivateKey()
+    {
+        // Arrange - re-encode the PKCS#1 sample key as PKCS#8 ("BEGIN PRIVATE KEY")
+        using var source = PemKeyHelper.CreateRSAFromPem(TestKeys.PrivateKey);
+        var pkcs8Pem = source.ExportPkcs8PrivateKeyPem();
+
+        // Act
+        using var result = PemKeyHelper.CreateRSAFromPem(pkcs8Pem);
+
+        // Assert
+        Assert.AreSequenceEqual(source.ExportParameters(false).Modulus, result.ExportParameters(false).Modulus);
+    }
+
+    [TestMethod]
     public void CreateRSAFromPem_WithValidPrivateKey_ReturnsRSAWithPrivateKey()
     {
         // Act
@@ -42,19 +56,5 @@ public class PemKeyHelperTests
         // Assert
         Assert.AreEqual(2048, result.KeySize);
         Assert.ThrowsExactly<CryptographicException>(() => result.ExportParameters(true));
-    }
-
-    [TestMethod]
-    public void CreateRSAFromPem_WithPkcs8PrivateKey_ReturnsRSAWithPrivateKey()
-    {
-        // Arrange - re-encode the PKCS#1 sample key as PKCS#8 ("BEGIN PRIVATE KEY")
-        using var source = PemKeyHelper.CreateRSAFromPem(TestKeys.PrivateKey);
-        var pkcs8Pem = source.ExportPkcs8PrivateKeyPem();
-
-        // Act
-        using var result = PemKeyHelper.CreateRSAFromPem(pkcs8Pem);
-
-        // Assert
-        CollectionAssert.AreEqual(source.ExportParameters(false).Modulus, result.ExportParameters(false).Modulus);
     }
 }

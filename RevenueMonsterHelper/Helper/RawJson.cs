@@ -1,6 +1,6 @@
-using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.IO;
 
 namespace RevenueMonsterLibrary.Helper;
 
@@ -15,8 +15,7 @@ internal static class RawJson
     /// </summary>
     public static readonly JsonSerializer Serializer = JsonSerializer.Create(new JsonSerializerSettings
     {
-        DateParseHandling = DateParseHandling.None,
-        CheckAdditionalContent = true
+        DateParseHandling = DateParseHandling.None, CheckAdditionalContent = true
     });
 
     /// <summary>

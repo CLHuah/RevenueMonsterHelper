@@ -18,11 +18,6 @@ public sealed class SignedRequest
     public string NonceStr { get; init; }
 
     /// <summary>
-    ///     The value for the X-Timestamp header (Unix time in seconds).
-    /// </summary>
-    public string Timestamp { get; init; }
-
-    /// <summary>
     ///     The base64-encoded signature.
     /// </summary>
     public string Signature { get; init; }
@@ -31,4 +26,9 @@ public sealed class SignedRequest
     ///     The value for the X-Signature header, in the form "sha256 {signature}".
     /// </summary>
     public string SignatureHeader => $"{SignTypes.Sha256} {Signature}";
+
+    /// <summary>
+    ///     The value for the X-Timestamp header (Unix time in seconds).
+    /// </summary>
+    public string Timestamp { get; init; }
 }
