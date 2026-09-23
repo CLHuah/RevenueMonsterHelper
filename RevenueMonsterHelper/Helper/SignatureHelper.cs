@@ -146,7 +146,7 @@ public static class SignatureHelper
     ///     &timestamp={timestamp}"
     ///     If compactJson is null, the data parameter is omitted.
     /// </remarks>
-    private static string BuildSignatureInput(string? compactJson, string method, string nonceStr, string requestUrl,
+    private static string BuildSignatureInput(string compactJson,string method, string nonceStr, string requestUrl,
         string signType, string timestamp)
     {
         // Create data component if JSON exists, otherwise empty string
