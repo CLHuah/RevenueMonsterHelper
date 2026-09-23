@@ -235,7 +235,8 @@ public sealed class RevenueMonsterClient
     }
 
     /// <summary>
-    ///     Refunds a successful transaction, fully or partly.
+    ///     Refunds a transaction: returns the funds to the customer, before or after the settlement date depending on
+    ///     the payment provider.
     /// </summary>
     public Task<ApiResponse<TransactionQuickPay>> RefundAsync(RefundRequest request,
         CancellationToken cancellationToken = default)
@@ -247,7 +248,8 @@ public sealed class RevenueMonsterClient
     }
 
     /// <summary>
-    ///     Reverses a transaction that timed out or failed part-way.
+    ///     Reverses (cancels) a transaction by your order ID. Only possible within a short window after the
+    ///     transaction, such as 15 minutes; meant for cases like a dropped connection, to prevent double charges.
     /// </summary>
     public Task<ApiResponse<TransactionQuickPay>> ReverseAsync(string orderId,
         CancellationToken cancellationToken = default)

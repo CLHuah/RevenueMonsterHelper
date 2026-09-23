@@ -1,7 +1,8 @@
 namespace RevenueMonsterLibrary.Model;
 
 /// <summary>
-///     Request to refund a successful transaction.
+///     Request to refund a transaction: returns the funds to the customer, before or after the settlement date
+///     depending on the payment provider.
 /// </summary>
 public class RefundRequest
 {
@@ -20,13 +21,14 @@ public class RefundDetail
     public string currencyType { get; set; }
 
     /// <summary>
-    ///     Refund type as defined by the Revenue Monster refund API.
+    ///     Refund type, e.g. <see cref="Constants.RefundTypes.Full" />.
     /// </summary>
     public string type { get; set; }
 }
 
 /// <summary>
-///     Request to reverse a transaction that timed out or failed part-way.
+///     Request to reverse (cancel) a transaction. Only possible within a short window after the transaction, such as
+///     15 minutes; meant for cases like a dropped connection, to prevent double charges.
 /// </summary>
 public class ReverseRequest
 {
