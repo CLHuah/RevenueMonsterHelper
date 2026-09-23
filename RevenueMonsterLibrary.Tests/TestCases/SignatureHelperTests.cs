@@ -442,6 +442,78 @@ public class SignatureHelperTests
         Assert.AreEqual("{\"text\":\"a\\u003cb\\u003ec\\u0026d\"}", result);
     }
 
+    [TestMethod]
+    public void SignRequest_KnownPayload_ReturnsCanonicalBodyAndReferenceSignature()
+    {
+        // Act
+        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey, NonceStr,
+            Timestamp);
+
+        // Assert
+        Assert.AreEqual("{\"order\":{\"amount\":100,\"title\":\"A\\u0026B\"},\"storeId\":\"123\"}", signed.Body);
+        Assert.AreEqual(NonceStr, signed.NonceStr);
+        Assert.AreEqual(Timestamp, signed.Timestamp);
+        Assert.AreEqual(ExpectedSignature, signed.Signature);
+        Assert.AreEqual($"sha256 {ExpectedSignature}", signed.SignatureHeader);
+    }
+
+    [TestMethod]
+    public void SignRequest_WithoutNonceAndTimestamp_GeneratesThem()
+    {
+        // Act
+        var signed = SignatureHelper.SignRequest(SignedPayload, "POST", RequestUrl, TestKeys.PrivateKey);
+
+        // Assert
+        Assert.AreEqual(32, signed.NonceStr.Length);
+        var timestamp = DateTimeOffset.FromUnixTimeSeconds(long.Parse(signed.Timestamp));
+        Assert.IsLessThan(TimeSpan.FromMinutes(1), (DateTimeOffset.UtcNow - timestamp).Duration());
+    }
+
+    [TestMethod]
+    public void SignRequest_NoBody_HasNoBody()
+    {
+        // Act
+        var signed = SignatureHelper.SignRequest(null, "GET", RequestUrl, TestKeys.PrivateKey, NonceStr, Timestamp);
+
+        // Assert
+        Assert.IsNull(signed.Body);
+        Assert.IsTrue(SignatureHelper.VerifyWebhook(null, "GET", RequestUrl, NonceStr, Timestamp,
+            signed.SignatureHeader, TestKeys.PublicKey));
+    }
+
+    [TestMethod]
+    public void VerifyWebhook_ValidSignatureHeader_ReturnsTrue()
+    {
+        // Arrange
+        const string rawBody = """{"storeId":"123","order":{"title":"A&B","amount":100}}""";
+
+        // Act
+        var isValid = SignatureHelper.VerifyWebhook(rawBody, "POST", RequestUrl, NonceStr, Timestamp,
+            $"sha256 {ExpectedSignature}", TestKeys.PublicKey);
+
+        // Assert
+        Assert.IsTrue(isValid);
+    }
+
+    [TestMethod]
+    [DataRow(null)]
+    [DataRow("")]
+    [DataRow("sha256")]
+    [DataRow(ExpectedSignature)]
+    [DataRow("sha1 " + ExpectedSignature)]
+    public void VerifyWebhook_MalformedSignatureHeader_ReturnsFalse(string? signatureHeader)
+    {
+        // Arrange
+        const string rawBody = """{"storeId":"123","order":{"title":"A&B","amount":100}}""";
+
+        // Act
+        var isValid = SignatureHelper.VerifyWebhook(rawBody, "POST", RequestUrl, NonceStr, Timestamp,
+            signatureHeader, TestKeys.PublicKey);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
     // Define a sample class for testing
     private class InnerClass
     {
