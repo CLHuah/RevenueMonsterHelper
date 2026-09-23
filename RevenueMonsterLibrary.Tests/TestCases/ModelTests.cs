@@ -141,6 +141,39 @@ public class ModelTests
     }
 
     [TestMethod]
+    public void PaymentTransactionByOrderID_LegacyName_StillDeserializesTheTransaction()
+    {
+        // Arrange
+        const string body = """{"item":{"transactionId":"t1","status":"SUCCESS"},"code":"SUCCESS"}""";
+
+        // Act
+#pragma warning disable CS0618 // the obsolete name is what this test covers
+        var response = JsonConvert.DeserializeObject<PaymentTransactionByOrderID>(body)!;
+#pragma warning restore CS0618
+
+        // Assert
+        Assert.IsInstanceOfType<TransactionByOrderIdResponse>(response);
+        Assert.AreEqual("t1", response.item.transactionId);
+        Assert.AreEqual("SUCCESS", response.item.status);
+    }
+
+    [TestMethod]
+    public void Notify_Data_IsAPaymentTransactionWithVoucher()
+    {
+        // Arrange
+        const string body = """{"data":{"transactionId":"t1","order":{"id":"o1"},"voucher":{"code":"V1"}}}""";
+
+        // Act
+        var notify = JsonConvert.DeserializeObject<Notify>(body)!;
+
+        // Assert
+        Assert.IsInstanceOfType<PaymentTransaction>(notify.data);
+        Assert.AreEqual("t1", notify.data.transactionId);
+        Assert.AreEqual("o1", notify.data.order.id);
+        Assert.AreEqual("V1", notify.data.voucher.code);
+    }
+
+    [TestMethod]
     public void Error_WithDebugAndDescription_Deserializes()
     {
         // Act

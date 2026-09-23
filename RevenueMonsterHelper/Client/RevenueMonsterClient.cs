@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -163,34 +162,34 @@ public sealed class RevenueMonsterClient
     /// <summary>
     ///     Gets an online checkout and its current state.
     /// </summary>
-    public Task<ApiResponse<OnlineCheckout>> GetOnlineCheckoutAsync(string checkoutId,
+    public Task<OnlineCheckoutResponse> GetOnlineCheckoutAsync(string checkoutId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(checkoutId);
 
-        return SendApiRequestAsync<ApiResponse<OnlineCheckout>>(HttpMethod.Get,
+        return SendApiRequestAsync<OnlineCheckoutResponse>(HttpMethod.Get,
             $"/payment/online?checkoutId={Uri.EscapeDataString(checkoutId)}", null, cancellationToken);
     }
 
     /// <summary>
     ///     Starts payment of an online checkout with a specific payment method, for example to get a wallet QR code.
     /// </summary>
-    public Task<ApiResponse<CheckoutByMethodResult>> CreateCheckoutByMethodAsync(CheckoutByMethodRequest request,
+    public Task<CheckoutByMethodResponse> CreateCheckoutByMethodAsync(CheckoutByMethodRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<ApiResponse<CheckoutByMethodResult>>(HttpMethod.Post, "/payment/online/checkout",
+        return SendApiRequestAsync<CheckoutByMethodResponse>(HttpMethod.Post, "/payment/online/checkout",
             request, cancellationToken);
     }
 
     /// <summary>
     ///     Gets the banks available for FPX payments, keyed by bank code.
     /// </summary>
-    public Task<ApiResponse<Dictionary<string, FpxBank>>> GetFpxBanksAsync(
+    public Task<FpxBankListResponse> GetFpxBanksAsync(
         CancellationToken cancellationToken = default)
     {
-        return SendApiRequestAsync<ApiResponse<Dictionary<string, FpxBank>>>(HttpMethod.Get, "/payment/fpx-bank",
+        return SendApiRequestAsync<FpxBankListResponse>(HttpMethod.Get, "/payment/fpx-bank",
             null, cancellationToken);
     }
 
@@ -201,36 +200,36 @@ public sealed class RevenueMonsterClient
     /// <summary>
     ///     Charges a customer by the payment code shown in their wallet app.
     /// </summary>
-    public Task<ApiResponse<TransactionQuickPay>> CreateQuickPayAsync(QuickPay request,
+    public Task<QuickPayResponse> CreateQuickPayAsync(QuickPay request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQuickPay>>(HttpMethod.Post, "/payment/quickpay", request,
+        return SendApiRequestAsync<QuickPayResponse>(HttpMethod.Post, "/payment/quickpay", request,
             cancellationToken);
     }
 
     /// <summary>
     ///     Gets a transaction by its transaction ID.
     /// </summary>
-    public Task<ApiResponse<TransactionQuickPay>> GetTransactionByIdAsync(string transactionId,
+    public Task<TransactionByIdResponse> GetTransactionByIdAsync(string transactionId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQuickPay>>(HttpMethod.Get,
+        return SendApiRequestAsync<TransactionByIdResponse>(HttpMethod.Get,
             $"/payment/transaction/{Uri.EscapeDataString(transactionId)}", null, cancellationToken);
     }
 
     /// <summary>
     ///     Gets a transaction by your order ID.
     /// </summary>
-    public Task<PaymentTransactionByOrderID> GetTransactionByOrderIdAsync(string orderId,
+    public Task<TransactionByOrderIdResponse> GetTransactionByOrderIdAsync(string orderId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
 
-        return SendApiRequestAsync<PaymentTransactionByOrderID>(HttpMethod.Get,
+        return SendApiRequestAsync<TransactionByOrderIdResponse>(HttpMethod.Get,
             $"/payment/transaction/order/{Uri.EscapeDataString(orderId)}", null, cancellationToken);
     }
 
@@ -238,12 +237,12 @@ public sealed class RevenueMonsterClient
     ///     Refunds a transaction: returns the funds to the customer, before or after the settlement date depending on
     ///     the payment provider.
     /// </summary>
-    public Task<ApiResponse<TransactionQuickPay>> RefundAsync(RefundRequest request,
+    public Task<RefundResponse> RefundAsync(RefundRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQuickPay>>(HttpMethod.Post, "/payment/refund", request,
+        return SendApiRequestAsync<RefundResponse>(HttpMethod.Post, "/payment/refund", request,
             cancellationToken);
     }
 
@@ -251,12 +250,12 @@ public sealed class RevenueMonsterClient
     ///     Reverses (cancels) a transaction by your order ID. Only possible within a short window after the
     ///     transaction, such as 15 minutes; meant for cases like a dropped connection, to prevent double charges.
     /// </summary>
-    public Task<ApiResponse<TransactionQuickPay>> ReverseAsync(string orderId,
+    public Task<ReverseResponse> ReverseAsync(string orderId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQuickPay>>(HttpMethod.Post, "/payment/reverse",
+        return SendApiRequestAsync<ReverseResponse>(HttpMethod.Post, "/payment/reverse",
             new ReverseRequest { orderId = orderId }, cancellationToken);
     }
 
@@ -267,37 +266,37 @@ public sealed class RevenueMonsterClient
     /// <summary>
     ///     Creates a QR code that customers scan to pay.
     /// </summary>
-    public Task<ApiResponse<TransactionQrCode>> CreateTransactionQrCodeAsync(TransactionQrCodeRequest request,
+    public Task<CreateTransactionQrCodeResponse> CreateTransactionQrCodeAsync(TransactionQrCodeRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQrCode>>(HttpMethod.Post, "/payment/transaction/qrcode",
+        return SendApiRequestAsync<CreateTransactionQrCodeResponse>(HttpMethod.Post, "/payment/transaction/qrcode",
             request, cancellationToken);
     }
 
     /// <summary>
     ///     Gets a transaction QR code by its code.
     /// </summary>
-    public Task<ApiResponse<TransactionQrCode>> GetTransactionQrCodeAsync(string code,
+    public Task<TransactionQrCodeResponse> GetTransactionQrCodeAsync(string code,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
 
-        return SendApiRequestAsync<ApiResponse<TransactionQrCode>>(HttpMethod.Get,
+        return SendApiRequestAsync<TransactionQrCodeResponse>(HttpMethod.Get,
             $"/payment/transaction/qrcode/{Uri.EscapeDataString(code)}", null, cancellationToken);
     }
 
     /// <summary>
     ///     Gets the successful transactions paid through a transaction QR code.
     /// </summary>
-    public Task<ApiListResponse<TransactionQuickPay>> GetSuccessfulTransactionsByQrCodeAsync(string code,
+    public Task<QrCodeTransactionsResponse> GetSuccessfulTransactionsByQrCodeAsync(string code,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
 
         var filter = Uri.EscapeDataString("{\"status\":\"SUCCESS\"}");
-        return SendApiRequestAsync<ApiListResponse<TransactionQuickPay>>(HttpMethod.Get,
+        return SendApiRequestAsync<QrCodeTransactionsResponse>(HttpMethod.Get,
             $"/payment/transaction/qrcode/{Uri.EscapeDataString(code)}/transactions?filter={filter}", null,
             cancellationToken);
     }

@@ -71,20 +71,22 @@ builder.Services.AddSingleton(options);
 builder.Services.AddHttpClient<RevenueMonsterClient>();
 ```
 
-| Method | Endpoint |
-|---|---|
-| `CreateOnlineCheckoutAsync` | `POST /payment/online` |
-| `GetOnlineCheckoutAsync` | `GET /payment/online?checkoutId=` |
-| `CreateCheckoutByMethodAsync` | `POST /payment/online/checkout` |
-| `GetFpxBanksAsync` | `GET /payment/fpx-bank` |
-| `CreateQuickPayAsync` | `POST /payment/quickpay` |
-| `GetTransactionByIdAsync` | `GET /payment/transaction/{transactionId}` |
-| `GetTransactionByOrderIdAsync` | `GET /payment/transaction/order/{orderId}` |
-| `RefundAsync` | `POST /payment/refund` |
-| `ReverseAsync` | `POST /payment/reverse` |
-| `CreateTransactionQrCodeAsync` | `POST /payment/transaction/qrcode` |
-| `GetTransactionQrCodeAsync` | `GET /payment/transaction/qrcode/{code}` |
-| `GetSuccessfulTransactionsByQrCodeAsync` | `GET /payment/transaction/qrcode/{code}/transactions` |
+| Method | Endpoint | Response (`item`) |
+|---|---|---|
+| `CreateOnlineCheckoutAsync` | `POST /payment/online` | `WebPaymentResponse` (`Item`) |
+| `GetOnlineCheckoutAsync` | `GET /payment/online?checkoutId=` | `OnlineCheckoutResponse` (`OnlineCheckout`) |
+| `CreateCheckoutByMethodAsync` | `POST /payment/online/checkout` | `CheckoutByMethodResponse` (`CheckoutByMethodResult`) |
+| `GetFpxBanksAsync` | `GET /payment/fpx-bank` | `FpxBankListResponse` (banks by code) |
+| `CreateQuickPayAsync` | `POST /payment/quickpay` | `QuickPayResponse` (`PaymentTransaction`) |
+| `GetTransactionByIdAsync` | `GET /payment/transaction/{transactionId}` | `TransactionByIdResponse` (`PaymentTransaction`) |
+| `GetTransactionByOrderIdAsync` | `GET /payment/transaction/order/{orderId}` | `TransactionByOrderIdResponse` (`PaymentTransaction`) |
+| `RefundAsync` | `POST /payment/refund` | `RefundResponse` (`PaymentTransaction`) |
+| `ReverseAsync` | `POST /payment/reverse` | `ReverseResponse` (`PaymentTransaction`) |
+| `CreateTransactionQrCodeAsync` | `POST /payment/transaction/qrcode` | `CreateTransactionQrCodeResponse` (`TransactionQrCode`) |
+| `GetTransactionQrCodeAsync` | `GET /payment/transaction/qrcode/{code}` | `TransactionQrCodeResponse` (`TransactionQrCode`) |
+| `GetSuccessfulTransactionsByQrCodeAsync` | `GET /payment/transaction/qrcode/{code}/transactions` | `QrCodeTransactionsResponse` (`items`: `PaymentTransaction`) |
+
+Every response has `code`, `error` and `item` (or `items`), from the generic `ApiResponse<T>` / `ApiListResponse<T>`. `TransactionQuickPay` and `PaymentTransactionByOrderID` are the earlier names of `PaymentTransaction` and `TransactionByOrderIdResponse`; they still work but are marked obsolete.
 
 Access tokens are requested on first use, cached, and renewed 60 seconds before they expire (with the refresh token when possible). Clients with the same credentials share the cached token, so a client created per request does not request a new token each time. Call `GetAccessTokenAsync()` if you need a token for your own requests.
 

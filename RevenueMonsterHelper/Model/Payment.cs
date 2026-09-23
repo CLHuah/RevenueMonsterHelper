@@ -33,14 +33,11 @@ public class QuickPay
     public VoucherCode voucher { get; set; }
 }
 
-public class PaymentTransactionByOrderID : ApiResponse<TransactionQuickPay>
-{
-}
-
 /// <summary>
-///     A payment transaction.
+///     A payment transaction (the Transaction Object in the Revenue Monster API documentation), as returned by
+///     QuickPay, refund, reverse and the transaction lookups.
 /// </summary>
-public class TransactionQuickPay
+public class PaymentTransaction
 {
     public long balanceAmount { get; set; }
     public string createdAt { get; set; }
@@ -60,6 +57,14 @@ public class TransactionQuickPay
     public string transactionId { get; set; }
     public string type { get; set; }
     public string updatedAt { get; set; }
+}
+
+/// <summary>
+///     Earlier name of <see cref="PaymentTransaction" />, kept so existing code still compiles.
+/// </summary>
+[Obsolete("Use PaymentTransaction.")]
+public class TransactionQuickPay : PaymentTransaction
+{
 }
 
 /// <summary>
@@ -208,10 +213,6 @@ public class Order
     public string title { get; set; }
 }
 
-public class WebPaymentResponse : ApiResponse<Item>
-{
-}
-
 public class Item
 {
     public string checkoutId { get; set; }
@@ -224,25 +225,10 @@ public class Notify
     public string eventType { get; set; }
 }
 
-public class Data
+/// <summary>
+///     The transaction in a webhook notification.
+/// </summary>
+public class Data : PaymentTransaction
 {
-    public long balanceAmount { get; set; }
-    public string createdAt { get; set; }
-    public string currencyType { get; set; }
-    public Error error { get; set; }
-    public TransactionExtraInfo extraInfo { get; set; }
-    public string method { get; set; }
-    public Order order { get; set; }
-    public Payee payee { get; set; }
-    public string platform { get; set; }
-    public string referenceId { get; set; }
-    public string region { get; set; }
-    public string status { get; set; }
-    public Store store { get; set; }
-    public string terminalId { get; set; }
-    public string transactionAt { get; set; }
-    public string transactionId { get; set; }
-    public string type { get; set; }
-    public string updatedAt { get; set; }
     public Voucher voucher { get; set; }
 }
