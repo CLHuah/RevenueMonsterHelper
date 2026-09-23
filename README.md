@@ -1,14 +1,14 @@
 # RevenueMonsterHelper
 
-A .NET library for integrating with Revenue Monster's payment API services. This library provides helper functions for authentication, signature generation, and payment processing.
+A .NET library for integrating with Revenue Monster's payment API services. It provides an API client, request signing, webhook verification and the request/response models.
 
 ## Features
 
-- Base64 encoding/decoding utilities
+- `RevenueMonsterClient`: OAuth access tokens (cached and renewed automatically), request signing, and typed calls for online checkout, QuickPay, transactions, refunds, reversals, transaction QR codes and FPX banks
+- Request signing and webhook verification that match Revenue Monster's canonical form
 - RSA key handling (PEM format support)
-- Digital signature generation and verification
-- Random nonce generation
-- Payment transaction models
+- Random nonce generation and Base64 utilities
+- Request/response models and constants
 
 ## Installation
 
@@ -27,54 +27,130 @@ dotnet build RevenueMonsterLibrary.slnx -c Release
 
 ## Usage
 
-Generating Signatures
+### Calling the API
+
+```cs
+using RevenueMonsterLibrary.Client;
+using RevenueMonsterLibrary.Constants;
+using RevenueMonsterLibrary.Model;
+
+var options = new RevenueMonsterOptions
+{
+    ClientId = "YOUR_CLIENT_ID",
+    ClientSecret = "YOUR_CLIENT_SECRET",
+    PrivateKey = File.ReadAllText("private.pem"), // its public key is uploaded to the merchant portal
+    Environment = RevenueMonsterEnvironment.Sandbox // the default; use Production to go live
+};
+
+var client = new RevenueMonsterClient(new HttpClient(), options);
+
+var checkout = await client.CreateOnlineCheckoutAsync(new WebPayment
+{
+    storeId = "YOUR_STORE_ID",
+    type = PaymentTypes.WebPayment,
+    layoutVersion = CheckoutLayoutVersions.V1,
+    redirectUrl = "https://example.com/payment/return",
+    notifyUrl = "https://example.com/payment/notify",
+    order = new Order
+    {
+        id = "ORDER-1001",
+        title = "Order 1001",
+        detail = "Order 1001",
+        amount = 1000, // in sen
+        currencyType = CurrencyTypes.MalaysianRinggit
+    }
+});
+
+// Send the customer to checkout.item.url
+```
+
+With ASP.NET Core, register the options and the client as a typed `HttpClient`:
+
+```cs
+builder.Services.AddSingleton(options);
+builder.Services.AddHttpClient<RevenueMonsterClient>();
+```
+
+| Method | Endpoint |
+|---|---|
+| `CreateOnlineCheckoutAsync` | `POST /payment/online` |
+| `GetOnlineCheckoutAsync` | `GET /payment/online?checkoutId=` |
+| `CreateCheckoutByMethodAsync` | `POST /payment/online/checkout` |
+| `GetFpxBanksAsync` | `GET /payment/fpx-bank` |
+| `CreateQuickPayAsync` | `POST /payment/quickpay` |
+| `GetTransactionByIdAsync` | `GET /payment/transaction/{transactionId}` |
+| `GetTransactionByOrderIdAsync` | `GET /payment/transaction/order/{orderId}` |
+| `RefundAsync` | `POST /payment/refund` |
+| `ReverseAsync` | `POST /payment/reverse` |
+| `CreateTransactionQrCodeAsync` | `POST /payment/transaction/qrcode` |
+| `GetTransactionQrCodeAsync` | `GET /payment/transaction/qrcode/{code}` |
+| `GetSuccessfulTransactionsByQrCodeAsync` | `GET /payment/transaction/qrcode/{code}/transactions` |
+
+Access tokens are requested on first use, cached, and renewed 60 seconds before they expire (with the refresh token when possible). Clients with the same credentials share the cached token, so a client created per request does not request a new token each time. Call `GetAccessTokenAsync()` if you need a token for your own requests.
+
+Errors are thrown as `RevenueMonsterException`:
+
+```cs
+try
+{
+    await client.RefundAsync(refundRequest);
+}
+catch (RevenueMonsterException ex)
+{
+    // ex.StatusCode, ex.ErrorCode, ex.Error?.message, ex.Error?.debug, ex.ResponseBody
+}
+```
+
+### Verifying Webhooks
+
+Verify against the raw request body before deserializing it. A model drops properties it does not declare, which makes the signature check fail.
 
 ```cs
 using Newtonsoft.Json;
 using RevenueMonsterLibrary.Helper;
+using RevenueMonsterLibrary.Model;
 
-// Generate signature for API requests
-string signature = SignatureHelper.GenerateSignature(
-    data: payload,
-    method: "POST", 
-    nonceStr: RandomString.GenerateRandomString(32),
-    privateKey: "YOUR_PRIVATE_KEY",
-    requestUrl: "API_ENDPOINT",
-    signType: "sha256",
-    timestamp: DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
-);
+app.MapPost("/payment/notify", async (HttpRequest request) =>
+{
+    using var reader = new StreamReader(request.Body);
+    var rawBody = await reader.ReadToEndAsync();
 
-// Send the body serialized with JsonConvert (the serializer used for signing),
-// or send SignatureHelper.GenerateCompactJson(payload) as the body
-string body = JsonConvert.SerializeObject(payload);
+    var isValid = SignatureHelper.VerifyWebhook(
+        rawBody,
+        method: request.Method,
+        requestUrl: "https://example.com/payment/notify", // the notify URL sent to Revenue Monster
+        nonceStr: request.Headers["X-Nonce-Str"],
+        timestamp: request.Headers["X-Timestamp"],
+        signatureHeader: request.Headers["X-Signature"],
+        publicKey: revenueMonsterPublicKey); // Revenue Monster's public key from the merchant portal
 
-// X-Signature header value: "sha256 {signature}"
+    if (!isValid) return Results.Unauthorized();
+
+    var notify = JsonConvert.DeserializeObject<Notify>(rawBody);
+    // ...
+    return Results.Ok();
+});
 ```
 
-Revenue Monster checks the signature against the body it receives, so the signed data must describe exactly the body you send. The method is lowercased and `signType` must be SHA256 (any casing).
+### Signing Requests Yourself
 
-Verifying Webhook Signatures
-
-Verify against the raw request body, before deserializing it. A model drops properties it does not declare, which makes the signature check fail.
+When you send requests without `RevenueMonsterClient`, use `SignRequest` and send its `Body` unchanged, so the body always matches the signature:
 
 ```cs
 using RevenueMonsterLibrary.Helper;
 
-bool isValid = SignatureHelper.VerifySignatureFromRawBody(
-    rawBody: "RAW_REQUEST_BODY",
-    method: "POST",
-    nonceStr: "X_NONCE_STR_HEADER",
-    publicKey: "REVENUE_MONSTER_PUBLIC_KEY",
-    requestUrl: "YOUR_NOTIFY_URL",
-    signType: "sha256",
-    timestamp: "X_TIMESTAMP_HEADER",
-    signature: "X_SIGNATURE_HEADER_WITHOUT_SHA256_PREFIX"
-);
+var signed = SignatureHelper.SignRequest(payload, "POST", requestUrl, privateKey);
+
+// Body:     signed.Body (JSON)
+// Headers:  Authorization: Bearer {accessToken}
+//           X-Nonce-Str:   signed.NonceStr
+//           X-Timestamp:   signed.Timestamp
+//           X-Signature:   signed.SignatureHeader   ("sha256 {signature}")
 ```
 
-`SignatureHelper.VerifySignature` accepts an object instead of the raw body (plain objects, Newtonsoft `JToken`s and System.Text.Json elements).
+Revenue Monster checks the signature against the body it receives. If you serialize the body yourself instead, use `JsonConvert.SerializeObject`, the serializer used for signing. The lower-level `SignatureHelper.GenerateSignature`, `VerifySignature`, `VerifySignatureFromRawBody` and `GenerateCompactJson` are also available.
 
-Loading an RSA key from PEM
+### Loading an RSA Key from PEM
 
 ```cs
 using System.Security.Cryptography;
@@ -85,9 +161,13 @@ using RSA rsa = PemKeyHelper.CreateRSAFromPem(File.ReadAllText("private.pem"));
 byte[] signed = rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 ```
 
+### Constants
+
+`RevenueMonsterLibrary.Constants` has the API base URLs (`RevenueMonsterUrls`), `SignTypes`, OAuth `Scopes`, `PaymentTypes`, `CheckoutLayoutVersions` and `CurrencyTypes`.
+
 ## Requirements
 * .NET 10.0 or higher
-* Newtonsoft.Json 13.0.4 or higher (used for signing and by the model attributes)
+* Newtonsoft.Json 13.0.4 or higher (used for signing, the client and the model attributes)
 
 ## Testing
 The project includes MSTest unit tests. Run them from the repository root:
