@@ -168,7 +168,7 @@ public class WebPayment
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public List<InHousePromo> inHousePromo { get; set; }
 
-    public string layoutVersion { get; set; } // v1 / v2 (Supported Credit Card), see CheckoutLayoutVersions
+    public string layoutVersion { get; set; } // v1 to v4, see CheckoutLayoutVersions
     public IList<string> method { get; set; }
 
     public string notifyUrl { get; set; }
