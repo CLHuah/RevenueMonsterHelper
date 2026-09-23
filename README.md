@@ -163,7 +163,7 @@ byte[] signed = rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding
 
 ### Constants
 
-`RevenueMonsterLibrary.Constants` has the API base URLs (`RevenueMonsterUrls`), `SignTypes`, OAuth `Scopes`, `PaymentTypes`, `CheckoutLayoutVersions` and `CurrencyTypes`.
+`RevenueMonsterLibrary.Constants` has the API base URLs (`RevenueMonsterUrls`), `SignTypes`, OAuth `Scopes`, `PaymentTypes`, `CheckoutLayoutVersions`, `CurrencyTypes` and `RefundTypes`.
 
 ## Requirements
 * .NET 10.0 or higher

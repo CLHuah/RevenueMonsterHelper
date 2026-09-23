@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using RevenueMonsterLibrary.Constants;
 using RevenueMonsterLibrary.Model;
 
 namespace RevenueMonsterLibrary.Tests.TestCases;
@@ -72,6 +73,43 @@ public class ModelTests
         Assert.AreEqual(
             """{"authCode":"123","ipAddress":"127.0.0.1","order":{"additionalData":null,"amount":100,"detail":null,"id":"o1","title":"t"},"storeId":"1"}""",
             json);
+    }
+
+    [TestMethod]
+    public void RefundRequest_MatchesDocumentedRequestBody()
+    {
+        // Arrange - request body from the Revenue Monster refund documentation
+        const string documented = """
+                                  {
+                                    "transactionId": "180730103903010431152179",
+                                    "refund": {
+                                      "type": "FULL",
+                                      "currencyType": "MYR",
+                                      "amount": 100
+                                    },
+                                    "reason": "test"
+                                  }
+                                  """;
+        var request = new RefundRequest
+        {
+            transactionId = "180730103903010431152179",
+            refund = new RefundDetail { type = RefundTypes.Full, currencyType = CurrencyTypes.MalaysianRinggit, amount = 100 },
+            reason = "test"
+        };
+
+        // Act & Assert
+        Assert.AreEqual(SignatureHelper.GenerateCompactJsonFromRaw(documented), SignatureHelper.GenerateCompactJson(request));
+    }
+
+    [TestMethod]
+    public void ReverseRequest_MatchesDocumentedRequestBody()
+    {
+        // Arrange - request body from the Revenue Monster reverse documentation
+        const string documented = """{ "orderId": "180730103903010431152179" }""";
+        var request = new ReverseRequest { orderId = "180730103903010431152179" };
+
+        // Act & Assert
+        Assert.AreEqual(SignatureHelper.GenerateCompactJsonFromRaw(documented), SignatureHelper.GenerateCompactJson(request));
     }
 
     [TestMethod]
