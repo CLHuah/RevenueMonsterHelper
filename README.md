@@ -7,6 +7,7 @@ A .NET library for integrating with Revenue Monster's payment API services. It p
 ## Features
 
 - `RevenueMonsterClient`: OAuth access tokens (cached and renewed automatically), request signing, and typed calls for online checkout, QuickPay, transactions, refunds, reversals, transaction QR codes and FPX banks
+- `AddRevenueMonsterClient` to register the client with dependency injection, with its `HttpClient` from `IHttpClientFactory`
 - Request signing and webhook verification that match Revenue Monster's canonical form
 - RSA key handling (PEM format support)
 - Random nonce generation and Base64 utilities
@@ -44,7 +45,9 @@ var options = new RevenueMonsterOptions
     Environment = RevenueMonsterEnvironment.Sandbox // the default; use Production to go live
 };
 
-var client = new RevenueMonsterClient(new HttpClient(), options);
+// Create one client and reuse it; it is thread-safe
+var client = new RevenueMonsterClient(
+    new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }), options);
 
 var checkout = await client.CreateOnlineCheckoutAsync(new WebPayment
 {
@@ -66,12 +69,7 @@ var checkout = await client.CreateOnlineCheckoutAsync(new WebPayment
 // Send the customer to checkout.item.url
 ```
 
-With ASP.NET Core, register the options and the client as a typed `HttpClient`:
-
-```cs
-builder.Services.AddSingleton(options);
-builder.Services.AddHttpClient<RevenueMonsterClient>();
-```
+Don't create an `HttpClient` per request: under load that exhausts sockets. `PooledConnectionLifetime` makes the long-lived `HttpClient` pick up DNS changes.
 
 | Method | Endpoint | Response (`item`) |
 |---|---|---|
@@ -90,7 +88,7 @@ builder.Services.AddHttpClient<RevenueMonsterClient>();
 
 Every response has `code`, `error` and `item` (or `items`), from the generic `ApiResponse<T>` / `ApiListResponse<T>`. `TransactionQuickPay` and `PaymentTransactionByOrderID` are the earlier names of `PaymentTransaction` and `TransactionByOrderIdResponse`; they still work but are marked obsolete.
 
-Access tokens are requested on first use, cached, and renewed 60 seconds before they expire (with the refresh token when possible). Clients with the same credentials share the cached token, so a client created per request does not request a new token each time. Call `GetAccessTokenAsync()` if you need a token for your own requests.
+Access tokens are requested on first use, cached, and renewed 60 seconds before they expire (with the refresh token when possible). Clients with the same credentials share the cached token, so clients created per request (as `IHttpClientFactory` does) do not request a new token each time. Call `GetAccessTokenAsync()` if you need a token for your own requests.
 
 Errors are thrown as `RevenueMonsterException`:
 
@@ -104,6 +102,40 @@ catch (RevenueMonsterException ex)
     // ex.StatusCode, ex.ErrorCode, ex.Error?.message, ex.Error?.debug, ex.ResponseBody
 }
 ```
+
+### Dependency Injection
+
+With ASP.NET Core or another app that uses `Microsoft.Extensions.DependencyInjection`, register the client with `AddRevenueMonsterClient`. It binds the options from configuration and gets the `HttpClient` from `IHttpClientFactory`:
+
+```cs
+using RevenueMonsterLibrary.Client;
+
+builder.Services.AddRevenueMonsterClient(builder.Configuration.GetSection("RevenueMonster"));
+```
+
+```json
+{
+  "RevenueMonster": {
+    "ClientId": "YOUR_CLIENT_ID",
+    "Environment": "Sandbox"
+  }
+}
+```
+
+Keep `ClientSecret` and `PrivateKey` out of `appsettings.json`. Put them in user secrets or environment variables such as `RevenueMonster__ClientSecret`. To set the options in code instead:
+
+```cs
+builder.Services.AddRevenueMonsterClient(options =>
+{
+    options.ClientId = "YOUR_CLIENT_ID";
+    options.ClientSecret = "YOUR_CLIENT_SECRET";
+    options.PrivateKey = File.ReadAllText("private.pem");
+});
+```
+
+Then inject `RevenueMonsterClient` where you need it. It is registered as transient, so inject it into transient or scoped services only. A singleton would keep one `HttpClient` for the app's lifetime and stop the factory from rotating its handler. If a singleton needs the client, create one yourself as shown above.
+
+`AddRevenueMonsterClient` returns the client's `IHttpClientBuilder`, which you can use to add message handlers or change the `HttpClient` settings. Don't add a handler that retries `POST` requests: Revenue Monster could process a retried payment or refund twice.
 
 ### Verifying Webhooks
 
@@ -172,6 +204,7 @@ byte[] signed = rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding
 ## Requirements
 * .NET 10.0 or higher
 * Newtonsoft.Json 13.0.4 or higher (used for signing, the client and the model attributes)
+* Microsoft.Extensions.Http and Microsoft.Extensions.Options.ConfigurationExtensions 10.0.12 or higher (used by `AddRevenueMonsterClient`)
 
 ## Testing
 The project includes MSTest unit tests. Run them from the repository root:

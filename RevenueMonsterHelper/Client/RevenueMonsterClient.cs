@@ -49,9 +49,9 @@ public sealed class RevenueMonsterClient
     ///     Source of the current time, used for request timestamps and token expiry. Defaults to the system clock.
     /// </param>
     /// <remarks>
-    ///     This is the only public constructor, so the client can be registered as a typed client with
-    ///     <c>services.AddHttpClient&lt;RevenueMonsterClient&gt;()</c> once <see cref="RevenueMonsterOptions" /> is
-    ///     registered.
+    ///     With dependency injection, register the client with <c>services.AddRevenueMonsterClient(...)</c> so the
+    ///     HttpClient comes from IHttpClientFactory. Without it, create one client and reuse it: creating an
+    ///     HttpClient per request can exhaust sockets under load.
     /// </remarks>
     public RevenueMonsterClient(HttpClient httpClient, RevenueMonsterOptions options, TimeProvider timeProvider = null)
     {
