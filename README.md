@@ -1,5 +1,7 @@
 # RevenueMonsterHelper
 
+[![CI](https://github.com/CLHuah/RevenueMonsterHelper/actions/workflows/ci.yml/badge.svg)](https://github.com/CLHuah/RevenueMonsterHelper/actions/workflows/ci.yml)
+
 A .NET library for integrating with Revenue Monster's payment API services. It provides an API client, request signing, webhook verification and the request/response models.
 
 ## Features
@@ -177,3 +179,5 @@ The project includes MSTest unit tests. Run them from the repository root:
 ```sh
 dotnet test RevenueMonsterLibrary.slnx
 ```
+
+CI (`.github/workflows/ci.yml`) builds with warnings as errors and runs the tests on Ubuntu and Windows for every pull request to `master` and every push to `master` and `Development`.
