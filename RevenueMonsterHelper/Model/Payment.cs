@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 
@@ -24,21 +25,28 @@ public class QuickPay
 
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public string terminalId { get; set; }
+
+    /// <summary>
+    ///     Voucher to apply to the payment.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public VoucherCode voucher { get; set; }
 }
 
-public class PaymentTransactionByOrderID
+public class PaymentTransactionByOrderID : ApiResponse<TransactionQuickPay>
 {
-    public string code { get; set; }
-    public Error error { get; set; }
-    public TransactionQuickPay item { get; set; }
 }
 
+/// <summary>
+///     A payment transaction.
+/// </summary>
 public class TransactionQuickPay
 {
     public long balanceAmount { get; set; }
     public string createdAt { get; set; }
     public string currencyType { get; set; }
     public Error error { get; set; }
+    public TransactionExtraInfo extraInfo { get; set; }
     public string method { get; set; }
     public Order order { get; set; }
     public Payee payee { get; set; }
@@ -52,6 +60,32 @@ public class TransactionQuickPay
     public string transactionId { get; set; }
     public string type { get; set; }
     public string updatedAt { get; set; }
+}
+
+/// <summary>
+///     Extra information on a transaction. Properties this model does not declare are kept in
+///     <see cref="extensionData" />.
+/// </summary>
+public class TransactionExtraInfo
+{
+    public List<ExtraFee> extraFee { get; set; }
+
+    [JsonExtensionData]
+    public IDictionary<string, JToken> extensionData { get; set; }
+}
+
+/// <summary>
+///     A fee charged on top of a transaction.
+/// </summary>
+public class ExtraFee
+{
+    public long amount { get; set; }
+    public string feeType { get; set; }
+    public long feeValue { get; set; }
+    public bool isIncludedMDR { get; set; }
+    public bool isRefundAllowed { get; set; }
+    public string referenceId { get; set; }
+    public string type { get; set; }
 }
 
 public class Expiry
@@ -89,9 +123,15 @@ public class GeoLocation
 public class Payee
 {
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string subUserId { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public string userId { get; set; }
 }
 
+/// <summary>
+///     Request to create an online checkout. Optional properties that are left unset are not sent.
+/// </summary>
 public class WebPayment
 {
     public WebPayment()
@@ -99,23 +139,66 @@ public class WebPayment
         order = new Order();
     }
 
-    public string layoutVersion { get; set; } // v1 / v2 (Supported Credit Card)
+    /// <summary>
+    ///     Customer details, used for example to prefill the checkout page.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public Customer customer { get; set; }
+
+    /// <summary>
+    ///     Payment methods to hide from the checkout page.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public IList<string> excludeMethod { get; set; }
+
+    /// <summary>
+    ///     How long the checkout stays open, in seconds.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public long? expiresInSeconds { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public CheckoutExtraInfo extraInfo { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public List<InHousePromo> inHousePromo { get; set; }
+
+    public string layoutVersion { get; set; } // v1 / v2 (Supported Credit Card), see CheckoutLayoutVersions
     public IList<string> method { get; set; }
 
     public string notifyUrl { get; set; }
 
     public Order order { get; set; }
 
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public IList<string> paymentOrders { get; set; }
+
     public string redirectUrl { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string source { get; set; }
+
     public string storeId { get; set; }
 
-    public string type { get; set; } // WEB_PAYMENT or MOBILE_PAYMENT
+    public string type { get; set; } // WEB_PAYMENT or MOBILE_PAYMENT, see PaymentTypes
+
+    /// <summary>
+    ///     Voucher to apply to the payment.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public VoucherCode voucher { get; set; }
 }
 
 public class Order
 {
     public string additionalData { get; set; }
     public long amount { get; set; }
+
+    /// <summary>
+    ///     Breakdown of <see cref="amount" /> into its parts.
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public List<AmountBreakdown> amountBreakdown { get; set; }
 
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public string currencyType { get; set; }
@@ -125,10 +208,8 @@ public class Order
     public string title { get; set; }
 }
 
-public class WebPaymentResponse
+public class WebPaymentResponse : ApiResponse<Item>
 {
-    public string code { get; set; }
-    public Item item { get; set; }
 }
 
 public class Item
@@ -148,6 +229,8 @@ public class Data
     public long balanceAmount { get; set; }
     public string createdAt { get; set; }
     public string currencyType { get; set; }
+    public Error error { get; set; }
+    public TransactionExtraInfo extraInfo { get; set; }
     public string method { get; set; }
     public Order order { get; set; }
     public Payee payee { get; set; }
